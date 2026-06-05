@@ -97,6 +97,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dcCloseWindow:        (accountId) => ipcRenderer.invoke('dc-close-window', accountId),
   dcCloseAllWindows:    ()          => ipcRenderer.invoke('dc-close-all-windows'),
   dcListOpenSessions:   ()          => ipcRenderer.invoke('dc-list-open-sessions'),
+
+  // ── Kik — main-process network + proxy checker ───────────────────────────
+  kikFetch:       (opts) => ipcRenderer.invoke('kik-net-fetch',   opts),
+  kikProxyCheck:  (opts) => ipcRenderer.invoke('kik-proxy-check', opts),
+  onKikProxyProgress: (cb) => {
+    ipcRenderer.removeAllListeners('kik-proxy-progress');
+    ipcRenderer.on('kik-proxy-progress', (_e, d) => cb(d));
+  },
+  onKikEvent: (cb) => {
+    ipcRenderer.removeAllListeners('kik-event');
+    ipcRenderer.on('kik-event', (_e, d) => cb(d));
+  },
 });
 
 // Discord Tools is exposed as a separate bridge so the existing Discord account

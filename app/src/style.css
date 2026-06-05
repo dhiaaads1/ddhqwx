@@ -16647,3 +16647,81 @@ body:not(.platform-kik) #page-kik-create { display: none !important; }
 .kl-info .kl-msg { color: #74b9ff; }
 .kl-head .kl-msg { color: #fff; font-weight: bold; }
 .kl-dim  .kl-msg { color: #888; }
+
+/* ── Proxies page ────────────────────────────────────────────── */
+#page-kik-proxies {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+body:not(.platform-kik) #page-kik-proxies { display: none !important; }
+body:not(.platform-kik) .nav-btn[data-tab="kik-proxies"] { display: none !important; }
+
+.kik-proxy-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 860px) {
+  .kik-proxy-body { grid-template-columns: 1fr; }
+}
+
+.kik-proxy-textarea {
+  width: 100%;
+  min-height: 160px;
+  font-family: monospace;
+  font-size: 11px;
+  resize: vertical;
+}
+
+.kik-proxy-log {
+  min-height: 60px;
+  max-height: 120px;
+  margin-top: 8px;
+}
+
+.kik-proxy-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: calc(100vh - 320px);
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.kik-proxy-result {
+  padding: 5px 8px;
+  border-radius: 5px;
+  word-break: break-all;
+}
+
+.kpr-ok   { background: rgba(61,255,160,.08); color: #3dffa0; }
+.kpr-fail { background: rgba(255,77,77,.08);  color: #ff4d4d; }
+
+/* ── Navigator badge ─────────────────────────────────────────── */
+.kik-navigator-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #3dffa0;
+  background: rgba(61,255,160,.08);
+  border: 1px solid rgba(61,255,160,.2);
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+
+code {
+  background: rgba(255,255,255,.07);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+}

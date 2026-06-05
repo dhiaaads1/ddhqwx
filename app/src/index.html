@@ -130,6 +130,9 @@
     <button class="nav-btn" data-tab="kik-create" data-platform="kik">
       <span class="nav-ic"><i class="bi bi-person-plus-fill"></i></span><span>Create Account</span>
     </button>
+    <button class="nav-btn" data-tab="kik-proxies" data-platform="kik">
+      <span class="nav-ic"><i class="bi bi-shield-check"></i></span><span>Proxies</span>
+    </button>
 
     <!-- ─── Settings (shared across platforms) ─── -->
     <button class="nav-btn" data-tab="settings" data-platform="shared">
@@ -2478,7 +2481,7 @@
           <div class="kik-title-icon"><i class="bi bi-people-fill"></i></div>
           <div>
             <div class="kik-title">Kik Accounts</div>
-            <div class="kik-subtitle">Manage saved Kik accounts</div>
+            <div class="kik-subtitle">Saved Kik accounts — created silently, no browser window</div>
           </div>
         </div>
       </div>
@@ -2537,7 +2540,7 @@
           <div class="kik-title-icon"><i class="bi bi-person-plus-fill"></i></div>
           <div>
             <div class="kik-title">Create Kik Account</div>
-            <div class="kik-subtitle">Auto-register using a temp email — one click</div>
+            <div class="kik-subtitle">Runs entirely inside the app — no browser window opens</div>
           </div>
         </div>
       </div>
@@ -2563,17 +2566,17 @@
         <div class="kik-cfg-title"><i class="bi bi-gear-fill"></i> Configuration</div>
 
         <div class="kik-cfg-row">
-          <label class="kik-cfg-label">Proxy (optional)</label>
+          <label class="kik-cfg-label">Manual proxy override</label>
           <input id="kikProxy" class="inp kik-inp" type="text"
-                 placeholder="http://user:pass@host:port  or  socks5://host:port"
+                 placeholder="Leave blank to use built-in proxy pool"
                  autocomplete="off">
-          <span class="kik-cfg-hint">Leave blank to create without proxy</span>
+          <span class="kik-cfg-hint">Leave blank to rotate through built-in pool (check Proxies tab first)</span>
         </div>
 
         <div class="kik-cfg-row">
           <label class="kik-cfg-label">Quantity</label>
           <input id="kikQty" class="inp kik-inp kik-inp-sm" type="number" value="1" min="1" max="50">
-          <span class="kik-cfg-hint">How many accounts to create in one batch</span>
+          <span class="kik-cfg-hint">Accounts per batch</span>
         </div>
 
         <div class="kik-cfg-row">
@@ -2594,8 +2597,11 @@
       <!-- Progress + log -->
       <div class="kik-log-card">
         <div class="kik-log-header">
-          <span class="kik-cfg-title"><i class="bi bi-terminal"></i> Log</span>
+          <span class="kik-cfg-title"><i class="bi bi-terminal"></i> Navigator Log</span>
           <button class="btn ghost xs" id="kikClearLogBtn" type="button">Clear</button>
+        </div>
+        <div class="kik-navigator-badge">
+          <i class="bi bi-incognito"></i> Hidden navigator active — all requests routed via main process
         </div>
         <div id="kikProgressWrap" style="display:none">
           <div class="kik-prog-bar"><div class="kik-prog-fill" id="kikProgFill"></div></div>
@@ -2604,6 +2610,57 @@
         <div id="kikLog" class="kik-log"></div>
       </div>
 
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       KIK — Proxy Checker
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-kik-proxies">
+    <div class="kik-topbar">
+      <div class="kik-topbar-left">
+        <div class="kik-title-group">
+          <div class="kik-title-icon"><i class="bi bi-shield-check"></i></div>
+          <div>
+            <div class="kik-title">Proxy Checker</div>
+            <div class="kik-subtitle">Test proxies before use — only working ones are used for creation</div>
+          </div>
+        </div>
+      </div>
+      <div class="kik-topbar-right">
+        <div class="kik-actions">
+          <button class="btn ghost xs" id="kikLoadBuiltinBtn" type="button">
+            <i class="bi bi-arrow-down-circle"></i> Load Built-in
+          </button>
+          <button class="btn primary" id="kikCheckBtn" type="button">
+            <i class="bi bi-play-fill"></i> Check Proxies
+          </button>
+          <button class="btn danger" id="kikCheckStopBtn" type="button" style="display:none">
+            <i class="bi bi-stop-fill"></i> Stop
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kik-proxy-body">
+      <div class="kik-cfg-card" style="min-height:0">
+        <div class="kik-cfg-title"><i class="bi bi-list-ul"></i> Proxy List</div>
+        <div class="kik-cfg-hint" style="margin-bottom:6px">
+          Format: <code>host:port:username:password</code> or <code>http://user:pass@host:port</code> — one per line.
+          Built-in proxies are pre-loaded below.
+        </div>
+        <textarea id="kikProxyList" class="inp kik-proxy-textarea"
+          placeholder="host:port:username:password&#10;http://user:pass@host:port"></textarea>
+        <div id="kikProxyLog" class="kik-log kik-proxy-log"></div>
+      </div>
+
+      <div class="kik-cfg-card" style="min-height:0">
+        <div class="kik-cfg-title"><i class="bi bi-check2-circle"></i> Results</div>
+        <div class="kik-cfg-hint" style="margin-bottom:6px">
+          Working proxies are automatically used for account creation (rotating pool).
+        </div>
+        <div id="kikProxyResults" class="kik-proxy-results"></div>
+      </div>
     </div>
   </section>
 

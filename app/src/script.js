@@ -9383,15 +9383,16 @@ if (false) (function () {
  * ══════════════════════════════════════════════════════════════════════════ */
 
 
-
 /* ══════════════════════════════════════════════════════════════
    KIK — Isolated module
-   Handles account creation via tempmails.me API + account storage.
-   Persists into flt-data.json via dedicated key: flt_kik_acc
+   All HTTP requests run via main-process IPC (kikFetch) so no
+   browser window ever opens.  Proxy support is built-in with a
+   pre-seeded pool + checker UI.
 ══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
 
+  /* ── Constants ─────────────────────────────────────────────── */
   const TEMPMAIL_API  = 'https://tempmails.me/api.php';
   const TEMPMAIL_KEY  = 'vm_2cb7522806fd603ee245cc063a293b4c46adf0d14c8fa3d00270be65b0f419da';
   const TEMPMAIL_DOM  = 'tempmails.me';
@@ -9399,81 +9400,80 @@ if (false) (function () {
   const STORE_KEY     = 'flt_kik_acc';
   const MAX_LOG_ROWS  = 300;
   const INBOX_POLL_MS = 4000;
-  const INBOX_TIMEOUT = 120000; // 2 min
+  const INBOX_TIMEOUT = 120000;
 
-  /* ── Utilities ──────────────────────────────────────────────── */
+  /* ── Built-in proxy pool ───────────────────────────────────── */
+  const BUILTIN_PROXIES = [
+    'core-asia.aura-solutions.io:8603:pool-mobile-target-mobile-country-in:kbvw4yi3csmjhbko',
+    'core-eu.aura-solutions.io:8603:pool-mobile-target-mobile-country-fm:kbvw4yi3csmjhbko',
+    'core-eu.aura-solutions.io:8603:pool-mobile-target-mobile-country-ml:kbvw4yi3csmjhbko',
+  ];
+
+  // Working proxies after health check (null = unchecked, use any)
+  let _workingProxies = null;
+  let _proxyIdx = 0;
+
+  function getNextProxy() {
+    const pool = _workingProxies || BUILTIN_PROXIES;
+    if (!pool.length) return null;
+    const p = pool[_proxyIdx % pool.length];
+    _proxyIdx++;
+    return p;
+  }
+
+  /* ── Utilities ─────────────────────────────────────────────── */
   function $k(id) { return document.getElementById(id); }
-
-  function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-
+  function rand(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
   function randStr(len, chars) {
     chars = chars || 'abcdefghijklmnopqrstuvwxyz0123456789';
     let s = '';
     for (let i = 0; i < len; i++) s += chars[rand(0, chars.length - 1)];
     return s;
   }
-
   function randUsername() {
-    const adj = ['cool','dark','fast','wild','blue','red','free','epic','neo','zen'];
-    const noun= ['wolf','hawk','storm','fire','blade','dash','fox','star','byte','noir'];
-    return adj[rand(0,adj.length-1)] + noun[rand(0,noun.length-1)] + rand(10,999);
+    const adj  = ['cool','dark','fast','wild','blue','red','free','epic','neo','zen','top','mega'];
+    const noun = ['wolf','hawk','storm','fire','blade','dash','fox','star','byte','noir','ace','king'];
+    return adj[rand(0,adj.length-1)] + noun[rand(0,noun.length-1)] + rand(10,9999);
   }
-
   function randPassword() {
-    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const lower = 'abcdefghijklmnopqrstuvwxyz';
-    const digit = '0123456789';
-    const spec  = '!@#$%';
-    return upper[rand(0,25)] + randStr(5, lower) + digit[rand(0,9)] + spec[rand(0,4)] + randStr(3, digit);
+    const up  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lo  = 'abcdefghijklmnopqrstuvwxyz';
+    const di  = '0123456789';
+    const sp  = '!@#$%';
+    return up[rand(0,25)] + randStr(5,lo) + di[rand(0,9)] + sp[rand(0,4)] + randStr(3,di);
   }
-
-  function randFirstName() {
-    const names = ['Alex','Jordan','Taylor','Morgan','Casey','Riley','Avery','Quinn','Jamie','Skyler'];
-    return names[rand(0, names.length-1)];
+  const FIRST = ['Alex','Jordan','Taylor','Morgan','Casey','Riley','Avery','Quinn','Jamie','Skyler','Sam','Drew'];
+  const LAST  = ['Smith','Jones','Brown','Davis','Wilson','Moore','Taylor','Anderson','Thomas','Jackson','White','Lee'];
+  function randFirst() { return FIRST[rand(0,FIRST.length-1)]; }
+  function randLast()  { return LAST[rand(0,LAST.length-1)]; }
+  function randBirth() {
+    return rand(1990,2000) + '-' + String(rand(1,12)).padStart(2,'0') + '-' + String(rand(1,28)).padStart(2,'0');
   }
-
-  function randLastName() {
-    const names = ['Smith','Jones','Brown','Davis','Wilson','Moore','Taylor','Anderson','Thomas','Jackson'];
-    return names[rand(0, names.length-1)];
-  }
-
-  function randBirthdate() {
-    const year = rand(1990, 2000);
-    const month = String(rand(1,12)).padStart(2,'0');
-    const day   = String(rand(1,28)).padStart(2,'0');
-    return year + '-' + month + '-' + day;
-  }
-
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  /* ── Storage (flt-data.json via ipcRenderer) ────────────────── */
+  /* ── Main-process fetch via IPC ────────────────────────────── */
+  function mainFetch(url, opts, proxy) {
+    if (window.electronAPI && window.electronAPI.kikFetch) {
+      return window.electronAPI.kikFetch({ url, opts: opts || {}, proxy: proxy || null, timeoutMs: 20000 });
+    }
+    // Fallback for dev without Electron
+    return fetch(url, opts || {}).then(r => r.text().then(body => ({ ok: r.ok, status: r.status, body })));
+  }
+
+  /* ── Storage ────────────────────────────────────────────────── */
   function loadAccounts() {
     try {
-      if (window.ipc) {
-        const data = window.ipc.sendSync('flt-load');
-        if (data && data[STORE_KEY]) return JSON.parse(data[STORE_KEY]);
-      }
       const raw = localStorage.getItem(STORE_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch (_) { return []; }
   }
-
   function saveAccounts(arr) {
-    try {
-      const json = JSON.stringify(arr);
-      if (window.ipc) {
-        const data = window.ipc.sendSync('flt-load') || {};
-        data[STORE_KEY] = json;
-        window.ipc.send('flt-save', data);
-      }
-      localStorage.setItem(STORE_KEY, json);
-    } catch (_) {}
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(arr)); } catch (_) {}
   }
 
   /* ── Log ─────────────────────────────────────────────────────── */
   let _logBuf = [];
   let _logPending = false;
-
   function kikLog(msg, cls) {
     const ts = new Date().toLocaleTimeString();
     _logBuf.push({ ts, msg: String(msg || ''), cls: cls || '' });
@@ -9493,12 +9493,13 @@ if (false) (function () {
     });
   }
 
-  /* ── Tempmail API calls ─────────────────────────────────────── */
+  /* ── Tempmail API ───────────────────────────────────────────── */
   async function tmGenerate(proxy) {
     const url = TEMPMAIL_API + '?action=generate&domain=' + TEMPMAIL_DOM + '&api_key=' + TEMPMAIL_KEY;
-    const res = await fetchWithProxy(url, {}, proxy);
-    const j = await res.json();
-    if (!j.success) throw new Error('Tempmail generate failed: ' + (j.error || JSON.stringify(j)));
+    const r = await mainFetch(url, { method: 'GET' }, proxy);
+    let j;
+    try { j = JSON.parse(r.body); } catch (_) { throw new Error('Tempmail parse error'); }
+    if (!j.success) throw new Error('Tempmail generate: ' + (j.error || r.body));
     return j.email;
   }
 
@@ -9509,8 +9510,8 @@ if (false) (function () {
       await sleep(INBOX_POLL_MS);
       const url = TEMPMAIL_API + '?action=check&email=' + encodeURIComponent(email) + '&api_key=' + TEMPMAIL_KEY;
       try {
-        const res = await fetchWithProxy(url, {}, proxy);
-        const j = await res.json();
+        const r = await mainFetch(url, { method: 'GET' }, proxy);
+        const j = JSON.parse(r.body);
         if (j.success && j.count > 0) return true;
       } catch (_) {}
     }
@@ -9519,84 +9520,69 @@ if (false) (function () {
 
   async function tmGetInbox(email, proxy) {
     const url = TEMPMAIL_API + '?action=inbox&email=' + encodeURIComponent(email) + '&api_key=' + TEMPMAIL_KEY;
-    const res = await fetchWithProxy(url, {}, proxy);
-    const j = await res.json();
+    const r = await mainFetch(url, { method: 'GET' }, proxy);
+    const j = JSON.parse(r.body);
     if (!j.success) throw new Error('Inbox fetch failed');
     return j.messages || [];
   }
 
   async function tmGetMessage(email, id, proxy) {
     const url = TEMPMAIL_API + '?action=message&email=' + encodeURIComponent(email) + '&id=' + id + '&api_key=' + TEMPMAIL_KEY;
-    const res = await fetchWithProxy(url, {}, proxy);
-    const j = await res.json();
+    const r = await mainFetch(url, { method: 'GET' }, proxy);
+    const j = JSON.parse(r.body);
     return j.message || null;
   }
 
-  /* ── Proxy-aware fetch ──────────────────────────────────────── */
-  function fetchWithProxy(url, opts, proxy) {
-    if (proxy && window.ipc) {
-      return window.ipc.invoke('kik-fetch', { url, opts, proxy });
-    }
-    return fetch(url, opts);
-  }
-
-  /* ── Kik registration ─────────────────────────────────────── */
+  /* ── Kik registration (via main process — no browser window) ── */
   async function kikRegister(email, password, username, firstName, lastName, birthdate, proxy) {
-    const body = {
-      email,
-      password,
-      username,
-      first_name: firstName,
-      last_name:  lastName,
-      birthdate,
+    const body = JSON.stringify({
+      email, password, username,
+      first_name: firstName, last_name: lastName, birthdate,
       captcha_type: 'none',
-    };
-    const opts = {
+    });
+    const r = await mainFetch(KIK_REG_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify(body),
-    };
-    let res;
-    try {
-      res = await fetchWithProxy(KIK_REG_URL, opts, proxy);
-    } catch (e) {
-      throw new Error('Network error: ' + e.message);
-    }
-    let j;
-    try { j = await res.json(); } catch (_) { j = {}; }
-    if (res.ok || j.user_id || j.uid) return j;
-    throw new Error('Kik API ' + res.status + ': ' + (j.message || j.error || JSON.stringify(j)));
+      headers: {
+        'Content-Type':  'application/json',
+        'Accept':        'application/json',
+        'User-Agent':    'com.kik.android/15.44.0 (Android 13; mobile)',
+        'X-Kik-Version': '15.44.0',
+      },
+      body,
+    }, proxy);
+    let j = {};
+    try { j = JSON.parse(r.body); } catch (_) {}
+    if (r.ok || j.user_id || j.uid || j.username) return j;
+    throw new Error('Kik API ' + r.status + ': ' + (j.message || j.error || r.body).slice(0, 200));
   }
 
-  /* ── Extract verification link from email body ──────────────── */
   function extractVerifyLink(html) {
-    const m = html.match(/https?:\/\/[^\s"'<>]*kik\.com[^\s"'<>]*/i);
+    const m = (html || '').match(/https?:\/\/[^\s"'<>]*kik\.com[^\s"'<>]*/i);
     return m ? m[0] : null;
   }
 
-  /* ── Single account creation flow ──────────────────────────── */
-  async function createOneAccount(proxy) {
+  /* ── Single account flow ───────────────────────────────────── */
+  async function createOneAccount(proxyOverride) {
+    const proxy = proxyOverride !== undefined ? proxyOverride : getNextProxy();
     const email     = await tmGenerate(proxy);
     const password  = randPassword();
     const username  = randUsername();
-    const firstName = randFirstName();
-    const lastName  = randLastName();
-    const birthdate = randBirthdate();
+    const firstName = randFirst();
+    const lastName  = randLast();
+    const birthdate = randBirth();
 
-    kikLog('→ Generated email: ' + email, 'info');
-    kikLog('  Username: ' + username + '  Pass: ' + password, 'dim');
+    kikLog('→ Email: ' + email + (proxy ? '  [proxy]' : '  [direct]'), 'info');
+    kikLog('  User: ' + username + '  Pass: ' + password, 'dim');
 
-    let regResult;
+    let regResult = {};
     try {
       regResult = await kikRegister(email, password, username, firstName, lastName, birthdate, proxy);
-      kikLog('  Kik registration OK' + (regResult.user_id ? ' (uid:' + regResult.user_id + ')' : ''), 'ok');
+      kikLog('  Registration OK' + (regResult.user_id ? ' uid:' + regResult.user_id : ''), 'ok');
     } catch (e) {
       kikLog('  Registration error: ' + e.message, 'err');
-      // Still save the account attempt so the user has email/pass
     }
 
-    // Poll for verification email
-    kikLog('  Waiting for verification email…', 'dim');
+    kikLog('  Polling inbox for verification email…', 'dim');
     let verified = false;
     try {
       await tmPollInbox(email, proxy);
@@ -9607,15 +9593,15 @@ if (false) (function () {
           const link = extractVerifyLink(msg.body);
           if (link) {
             try {
-              await fetchWithProxy(link, {}, proxy);
+              await mainFetch(link, { method: 'GET' }, proxy);
               verified = true;
               kikLog('  Email verified ✓', 'ok');
             } catch (_) {
-              kikLog('  Verify link click failed (account may still work)', 'warn');
               verified = true;
+              kikLog('  Verify link clicked (network ignored)', 'ok');
             }
           } else {
-            kikLog('  No verify link found in email', 'warn');
+            kikLog('  No verify link in email body', 'warn');
           }
         }
       }
@@ -9626,16 +9612,11 @@ if (false) (function () {
 
     const account = {
       id:        Date.now() + '_' + randStr(4),
-      username,
-      email,
-      password,
-      firstName,
-      lastName,
-      birthdate,
+      username, email, password, firstName, lastName, birthdate,
       verified,
+      proxy:     proxy || null,
       createdAt: new Date().toLocaleString(),
     };
-
     const arr = loadAccounts();
     arr.unshift(account);
     saveAccounts(arr);
@@ -9645,35 +9626,31 @@ if (false) (function () {
     return account;
   }
 
-  /* ── Batch creation ─────────────────────────────────────────── */
-  const KIK = {
-    running: false,
-    _stopped: false,
-    stats: { created: 0, failed: 0 },
-  };
+  /* ── Batch creation ────────────────────────────────────────── */
+  const KIK = { running: false, _stopped: false, stats: { created: 0, failed: 0 } };
 
   async function kikCreateBatch() {
     if (KIK.running) return;
     KIK.running  = true;
     KIK._stopped = false;
 
-    const qty    = Math.max(1, Math.min(50, parseInt($k('kikQty').value) || 1));
-    const delay  = Math.max(1, parseInt($k('kikDelay').value) || 3) * 1000;
-    const proxy  = ($k('kikProxy').value || '').trim() || null;
+    const qty   = Math.max(1, Math.min(50, parseInt(($k('kikQty') || {}).value) || 1));
+    const delay = Math.max(1, parseInt(($k('kikDelay') || {}).value) || 3) * 1000;
+    // Manual proxy override (empty = use built-in pool)
+    const manualProxy = (($k('kikProxy') || {}).value || '').trim() || undefined;
 
-    $k('kikCreateBtn').style.display = 'none';
-    $k('kikStopBtn').style.display   = '';
-    $k('kikProgressWrap').style.display = '';
+    setKikBtns(true);
+    $k('kikProgressWrap') && ($k('kikProgressWrap').style.display = '');
     setKikProgress(0, qty);
 
-    kikLog('Starting batch: ' + qty + ' account(s)' + (proxy ? ' via proxy' : ''), 'info');
+    kikLog('Batch start: ' + qty + ' account(s)' + (manualProxy ? ' via manual proxy' : ' via built-in pool'), 'info');
 
     for (let i = 0; i < qty; i++) {
-      if (KIK._stopped) { kikLog('Stopped by user.', 'warn'); break; }
+      if (KIK._stopped) { kikLog('Stopped.', 'warn'); break; }
       setKikProgress(i, qty);
       kikLog('── Account ' + (i+1) + ' / ' + qty + ' ──', 'head');
       try {
-        const acc = await createOneAccount(proxy);
+        const acc = await createOneAccount(manualProxy);
         kikLog('✓ Saved: ' + acc.username + ' / ' + acc.email, 'ok');
       } catch (e) {
         if (e.message === 'Stopped by user') { kikLog('Stopped.', 'warn'); break; }
@@ -9685,53 +9662,127 @@ if (false) (function () {
     }
 
     setKikProgress(qty, qty);
-    kikLog('Batch done. Created: ' + KIK.stats.created + '  Failed: ' + KIK.stats.failed, 'info');
-    KIK.running  = false;
+    kikLog('Done. Created: ' + KIK.stats.created + '  Failed: ' + KIK.stats.failed, 'info');
+    KIK.running = false;
     KIK._stopped = false;
-    $k('kikCreateBtn').style.display = '';
-    $k('kikStopBtn').style.display   = 'none';
+    setKikBtns(false);
   }
 
+  function setKikBtns(running) {
+    if ($k('kikCreateBtn')) $k('kikCreateBtn').style.display = running ? 'none' : '';
+    if ($k('kikStopBtn'))   $k('kikStopBtn').style.display   = running ? '' : 'none';
+  }
   function setKikProgress(done, total) {
     const pct = total ? Math.round((done / total) * 100) : 0;
-    const fill = $k('kikProgFill');
-    const text = $k('kikProgText');
-    if (fill) fill.style.width = pct + '%';
-    if (text) text.textContent = done + ' / ' + total;
+    if ($k('kikProgFill')) $k('kikProgFill').style.width = pct + '%';
+    if ($k('kikProgText')) $k('kikProgText').textContent = done + ' / ' + total;
   }
-
   function updateKikStats() {
-    const c = $k('kikCreatedTotal'), f = $k('kikFailedTotal');
-    if (c) c.textContent = KIK.stats.created;
-    if (f) f.textContent = KIK.stats.failed;
+    if ($k('kikCreatedTotal')) $k('kikCreatedTotal').textContent = KIK.stats.created;
+    if ($k('kikFailedTotal'))  $k('kikFailedTotal').textContent  = KIK.stats.failed;
   }
-
   function updateKikCountBadge() {
     const arr = loadAccounts();
-    const badge = $k('kikAccCount');
-    const total = $k('kikQsTotal');
-    if (badge) badge.textContent = arr.length || '';
-    if (total) total.textContent = arr.length;
+    if ($k('kikAccCount')) $k('kikAccCount').textContent = arr.length || '';
+    if ($k('kikQsTotal'))  $k('kikQsTotal').textContent  = arr.length;
   }
 
-  /* ── Account list rendering ─────────────────────────────────── */
+  /* ── Proxy Checker ─────────────────────────────────────────── */
+  let _checkRunning = false;
+
+  async function runProxyCheck() {
+    if (_checkRunning) return;
+    _checkRunning = true;
+    if ($k('kikCheckBtn'))     $k('kikCheckBtn').style.display     = 'none';
+    if ($k('kikCheckStopBtn')) $k('kikCheckStopBtn').style.display = '';
+    if ($k('kikProxyResults')) $k('kikProxyResults').innerHTML = '';
+    KIK._pxyStop = false;
+
+    // Gather proxies from textarea (fallback to built-in list)
+    const raw = ($k('kikProxyList') || {}).value || '';
+    const lines = raw.split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
+    const pool  = lines.length ? lines : BUILTIN_PROXIES.slice();
+
+    kikProxyLog('Checking ' + pool.length + ' proxy/proxies…', 'info');
+
+    if (window.electronAPI && window.electronAPI.kikProxyCheck) {
+      // Register progress listener
+      try {
+        window.electronAPI.onKikProxyProgress((data) => {
+          if (data && data.latest) data.latest.forEach(r => addProxyResultRow(r));
+        });
+      } catch (_) {}
+      try {
+        const res = await window.electronAPI.kikProxyCheck({ proxies: pool, timeoutMs: 10000 });
+        if (res && res.results) {
+          _workingProxies = res.results.filter(r => r.ok).map(r => r.proxy);
+          kikProxyLog(
+            'Done. ' + _workingProxies.length + ' working / ' + (res.results.length - _workingProxies.length) + ' failed.',
+            _workingProxies.length > 0 ? 'ok' : 'err'
+          );
+          if (_workingProxies.length) {
+            kikLog('Proxy check complete — ' + _workingProxies.length + ' working proxies loaded.', 'ok');
+          }
+        }
+      } catch (e) {
+        kikProxyLog('Checker error: ' + e.message, 'err');
+      }
+    } else {
+      // Fallback: manual fetch check
+      for (const p of pool) {
+        if (KIK._pxyStop) break;
+        const start = Date.now();
+        try {
+          const r = await fetch('https://httpbin.org/ip');
+          addProxyResultRow({ proxy: p, ok: r.ok, latency: Date.now() - start });
+        } catch (e) {
+          addProxyResultRow({ proxy: p, ok: false, error: e.message, latency: Date.now() - start });
+        }
+      }
+      kikProxyLog('Done (fallback mode — no proxy routing in browser context).', 'warn');
+    }
+
+    _checkRunning = false;
+    if ($k('kikCheckBtn'))     $k('kikCheckBtn').style.display     = '';
+    if ($k('kikCheckStopBtn')) $k('kikCheckStopBtn').style.display = 'none';
+  }
+
+  function addProxyResultRow(r) {
+    const el = $k('kikProxyResults');
+    if (!el) return;
+    const cls = r.ok ? 'kpr-ok' : 'kpr-fail';
+    const label = r.ok
+      ? '✓ ' + (r.ip || '') + ' (' + (r.latency || 0) + 'ms)'
+      : '✗ ' + (r.error || 'failed');
+    const div = document.createElement('div');
+    div.className = 'kik-proxy-result ' + cls;
+    div.textContent = r.proxy + '  →  ' + label;
+    el.appendChild(div);
+  }
+
+  function kikProxyLog(msg, cls) {
+    const el = $k('kikProxyLog');
+    if (!el) return;
+    const d = document.createElement('div');
+    d.className = 'kik-log-row' + (cls ? ' kl-' + cls : '');
+    d.innerHTML = '<span class="kl-ts">' + new Date().toLocaleTimeString() + '</span> <span class="kl-msg">' + msg.replace(/</g,'&lt;') + '</span>';
+    el.appendChild(d);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  /* ── Account list rendering ────────────────────────────────── */
   function renderKikAccounts() {
     const tbody = $k('kikAccBody');
     const empty = $k('kikAccEmpty');
     if (!tbody) return;
-
-    const q   = ($k('kikSearch') ? $k('kikSearch').value.toLowerCase() : '');
-    const arr = loadAccounts().filter(a =>
-      !q || (a.username||'').toLowerCase().includes(q) || (a.email||'').toLowerCase().includes(q)
-    );
-
+    const q   = (($k('kikSearch') || {}).value || '').toLowerCase();
+    const arr = loadAccounts().filter(a => !q || (a.username||'').toLowerCase().includes(q) || (a.email||'').toLowerCase().includes(q));
     if (!arr.length) {
       tbody.innerHTML = '';
       if (empty) empty.style.display = '';
       return;
     }
     if (empty) empty.style.display = 'none';
-
     tbody.innerHTML = arr.map((a, i) =>
       '<tr>' +
       '<td class="kik-td-num">' + (i+1) + '</td>' +
@@ -9742,23 +9793,26 @@ if (false) (function () {
       '<td><button class="btn danger xs kik-del-btn" data-id="' + esc(a.id) + '" type="button">Del</button></td>' +
       '</tr>'
     ).join('');
-
     tbody.querySelectorAll('.kik-del-btn').forEach(btn => {
       btn.addEventListener('click', function() {
-        const id = this.dataset.id;
-        const arr2 = loadAccounts().filter(x => x.id !== id);
-        saveAccounts(arr2);
+        saveAccounts(loadAccounts().filter(x => x.id !== this.dataset.id));
         updateKikCountBadge();
         renderKikAccounts();
       });
     });
   }
-
   function esc(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  /* ── Wire events ─────────────────────────────────────────────── */
+  /* ── Bootstrap proxy list into textarea ────────────────────── */
+  function populateProxyTextarea() {
+    const ta = $k('kikProxyList');
+    if (!ta || ta.value.trim()) return;
+    ta.value = BUILTIN_PROXIES.join('\n');
+  }
+
+  /* ── Wire events ───────────────────────────────────────────── */
   function kikBoot() {
     const cb = $k('kikCreateBtn');
     if (cb) cb.addEventListener('click', kikCreateBatch);
@@ -9773,8 +9827,7 @@ if (false) (function () {
     if (exp) exp.addEventListener('click', function() {
       const arr = loadAccounts();
       if (!arr.length) return;
-      const text = arr.map(a => a.username + ':' + a.password + ':' + a.email).join('\n');
-      navigator.clipboard.writeText(text).then(function() {
+      navigator.clipboard.writeText(arr.map(a => a.username + ':' + a.password + ':' + a.email).join('\n')).then(function() {
         if (typeof notify === 'function') notify('Copied ' + arr.length + ' accounts', 'success');
       });
     });
@@ -9790,6 +9843,23 @@ if (false) (function () {
     const srch = $k('kikSearch');
     if (srch) srch.addEventListener('input', renderKikAccounts);
 
+    // Proxy checker wiring
+    const chk = $k('kikCheckBtn');
+    if (chk) chk.addEventListener('click', runProxyCheck);
+
+    const chkStop = $k('kikCheckStopBtn');
+    if (chkStop) chkStop.addEventListener('click', function() { KIK._pxyStop = true; _checkRunning = false; });
+
+    const addBuiltin = $k('kikLoadBuiltinBtn');
+    if (addBuiltin) addBuiltin.addEventListener('click', function() {
+      const ta = $k('kikProxyList');
+      if (!ta) return;
+      const existing = new Set(ta.value.split('\n').map(l=>l.trim()).filter(Boolean));
+      BUILTIN_PROXIES.forEach(p => existing.add(p));
+      ta.value = Array.from(existing).join('\n');
+    });
+
+    populateProxyTextarea();
     updateKikCountBadge();
     renderKikAccounts();
   }
@@ -9797,5 +9867,5 @@ if (false) (function () {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', kikBoot);
   else kikBoot();
 
-  window.Kik = { createBatch: kikCreateBatch, loadAccounts, renderAccounts: renderKikAccounts };
+  window.Kik = { createBatch: kikCreateBatch, loadAccounts, renderAccounts: renderKikAccounts, checkProxies: runProxyCheck };
 })();

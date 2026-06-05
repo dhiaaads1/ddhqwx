@@ -6806,3 +6806,208 @@ ipcMain.handle('dc-tools-send-interaction', async (_e, request) => {
     dctInteractionBusy = false;
   }
 });
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ *  KIK — Main-process network module
+ *  All HTTP(S) requests for Kik account creation run here via Node.js
+ *  native modules.  No BrowserWindow is ever opened for Kik registration.
+ *  Proxy support: HTTP CONNECT tunnel (works for HTTPS targets).
+ *  Proxy string format accepted: "host:port:user:pass" OR standard URL.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+// ── Parse proxy string → { host, port, user, pass } ─────────────────────────
+function kikParseProxy(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  // URL form: http://user:pass@host:port  or  socks5://...
+  if (/^https?:\/\//i.test(s) || /^socks/i.test(s)) {
+    try {
+      const u = new URL(s);
+      return { host: u.hostname, port: parseInt(u.port) || 8080, user: decodeURIComponent(u.username || ''), pass: decodeURIComponent(u.password || '') };
+    } catch (_) { return null; }
+  }
+  // Colon-separated: host:port:user:pass
+  const parts = s.split(':');
+  if (parts.length >= 4) {
+    return { host: parts[0].trim(), port: parseInt(parts[1]) || 8080, user: parts[2].trim(), pass: parts.slice(3).join(':').trim() };
+  }
+  if (parts.length === 2) {
+    return { host: parts[0].trim(), port: parseInt(parts[1]) || 8080, user: '', pass: '' };
+  }
+  return null;
+}
+
+// ── Proxy CONNECT tunnel → returns a connected TLS socket ───────────────────
+function kikProxyConnect(proxy, targetHost, targetPort, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Proxy CONNECT timeout')), timeoutMs || 15000);
+    const req = http.request({
+      host:   proxy.host,
+      port:   proxy.port,
+      method: 'CONNECT',
+      path:   targetHost + ':' + targetPort,
+      headers: proxy.user
+        ? { 'Proxy-Authorization': 'Basic ' + Buffer.from(proxy.user + ':' + proxy.pass).toString('base64') }
+        : {},
+      timeout: timeoutMs || 15000,
+    });
+    req.on('connect', (_res, socket) => {
+      clearTimeout(timer);
+      if (_res.statusCode !== 200) {
+        socket.destroy();
+        return reject(new Error('Proxy CONNECT returned HTTP ' + _res.statusCode));
+      }
+      resolve(socket);
+    });
+    req.on('error', (e) => { clearTimeout(timer); reject(e); });
+    req.on('timeout', () => { req.destroy(new Error('Proxy CONNECT timeout')); });
+    req.end();
+  });
+}
+
+// ── Main fetch function — runs in main process, proxy-aware ─────────────────
+function kikNetFetch(url, opts, proxy, timeoutMs) {
+  return new Promise(async (resolve, reject) => {
+    const ms = timeoutMs || 20000;
+    let timer;
+    try {
+      const parsedUrl = new URL(url);
+      const isHttps   = parsedUrl.protocol === 'https:';
+      const host      = parsedUrl.hostname;
+      const port      = parseInt(parsedUrl.port) || (isHttps ? 443 : 80);
+      const method    = (opts && opts.method) || 'GET';
+      const headers   = Object.assign({
+        'User-Agent': 'com.kik.android/15.44.0 (Android 13; mobile)',
+        'Accept':     'application/json',
+        'Content-Type': 'application/json',
+      }, (opts && opts.headers) || {});
+      const body      = (opts && opts.body) ? String(opts.body) : null;
+      if (body) headers['Content-Length'] = Buffer.byteLength(body);
+
+      const reqOpts = {
+        method,
+        hostname: host,
+        port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers,
+        timeout: ms,
+      };
+
+      const makeReq = (mod, extraOpts) => new Promise((res2, rej2) => {
+        timer = setTimeout(() => rej2(new Error('Request timeout')), ms + 2000);
+        const r = mod.request(Object.assign({}, reqOpts, extraOpts || {}), (response) => {
+          let data = '';
+          response.setEncoding('utf8');
+          response.on('data', (c) => data += c);
+          response.on('end', () => {
+            clearTimeout(timer);
+            res2({ status: response.statusCode || 0, headers: response.headers, body: data });
+          });
+        });
+        r.on('error', (e) => { clearTimeout(timer); rej2(e); });
+        r.on('timeout', () => { r.destroy(new Error('Socket timeout')); });
+        if (body) r.write(body);
+        r.end();
+      });
+
+      let result;
+      if (proxy) {
+        const pxy = typeof proxy === 'string' ? kikParseProxy(proxy) : proxy;
+        if (!pxy) return reject(new Error('Invalid proxy string'));
+
+        if (isHttps) {
+          const tls = require('tls');
+          const socket = await kikProxyConnect(pxy, host, port, ms);
+          const tlsSocket = tls.connect({ socket, servername: host, rejectUnauthorized: false });
+          result = await new Promise((res2, rej2) => {
+            timer = setTimeout(() => rej2(new Error('TLS timeout')), ms);
+            tlsSocket.on('error', (e) => { clearTimeout(timer); rej2(e); });
+            const r = https.request(Object.assign({}, reqOpts, { socket: tlsSocket, hostname: host }), (response) => {
+              let data = '';
+              response.setEncoding('utf8');
+              response.on('data', (c) => data += c);
+              response.on('end', () => { clearTimeout(timer); res2({ status: response.statusCode || 0, headers: response.headers, body: data }); });
+            });
+            r.on('error', (e) => { clearTimeout(timer); rej2(e); });
+            if (body) r.write(body);
+            r.end();
+          });
+        } else {
+          // HTTP through proxy — plain CONNECT or direct proxy request
+          result = await makeReq(http, {
+            hostname: pxy.host,
+            port:     pxy.port,
+            path:     url,
+            headers:  Object.assign({}, headers, pxy.user
+              ? { 'Proxy-Authorization': 'Basic ' + Buffer.from(pxy.user + ':' + pxy.pass).toString('base64') }
+              : {}),
+          });
+        }
+      } else {
+        result = await makeReq(isHttps ? https : http);
+      }
+
+      resolve({ ok: result.status >= 200 && result.status < 300, status: result.status, headers: result.headers, body: result.body });
+    } catch (e) {
+      if (timer) clearTimeout(timer);
+      reject(e);
+    }
+  });
+}
+
+// ── IPC: single fetch call ───────────────────────────────────────────────────
+ipcMain.handle('kik-net-fetch', async (_e, { url, opts, proxy, timeoutMs }) => {
+  try {
+    const result = await kikNetFetch(url, opts || {}, proxy || null, timeoutMs || 20000);
+    return { ok: result.ok, status: result.status, body: result.body, headers: result.headers };
+  } catch (e) {
+    return { ok: false, status: 0, body: '', error: String(e && e.message || e) };
+  }
+});
+
+// ── IPC: check a list of proxies (concurrent, capped) ───────────────────────
+ipcMain.handle('kik-proxy-check', async (_e, { proxies, timeoutMs }) => {
+  const results = [];
+  const CHECK_URL = 'https://httpbin.org/ip';
+  const ms = timeoutMs || 10000;
+  const CONCURRENCY = 5;
+
+  const tasks = (proxies || []).map((raw) => async () => {
+    const pxy = kikParseProxy(raw);
+    if (!pxy) return { proxy: raw, ok: false, error: 'Invalid proxy format' };
+    const start = Date.now();
+    try {
+      const r = await kikNetFetch(CHECK_URL, { method: 'GET' }, pxy, ms);
+      const latency = Date.now() - start;
+      if (r.ok || r.status === 200) {
+        let ip = '';
+        try { ip = JSON.parse(r.body).origin || ''; } catch (_) {}
+        return { proxy: raw, ok: true, latency, ip };
+      }
+      return { proxy: raw, ok: false, error: 'HTTP ' + r.status, latency };
+    } catch (e) {
+      return { proxy: raw, ok: false, error: String(e && e.message || e), latency: Date.now() - start };
+    }
+  });
+
+  // Run in batches of CONCURRENCY
+  for (let i = 0; i < tasks.length; i += CONCURRENCY) {
+    const batch = tasks.slice(i, i + CONCURRENCY).map(fn => fn());
+    const done  = await Promise.all(batch);
+    results.push(...done);
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send('kik-proxy-progress', { done: results.length, total: tasks.length, latest: done });
+    }
+  }
+  return { ok: true, results };
+});
+
+// ── IPC: push arbitrary event to renderer (used by kikLog streaming) ─────────
+ipcMain.handle('kik-event-push', async (_e, payload) => {
+  try {
+    if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('kik-event', payload);
+    return { ok: true };
+  } catch (_) { return { ok: false }; }
+});
