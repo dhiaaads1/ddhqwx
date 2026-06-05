@@ -9984,6 +9984,25 @@ if (false) (function () {
       kcaSetProgress(d.done, d.total);
       kcaSetStats();
       kcaRenderTable();
+      // Auto-add to Kick Accounts tab if token present
+      if (d.autoAdd && d.account && d.account.token) {
+        try {
+          const a = d.account;
+          const clean = String(a.token || '').replace(/^Bearer\s+/i, '');
+          if (clean.length > 10 && typeof S !== 'undefined' && S.accounts) {
+            const id = 'kca-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+            S.accounts.push({
+              id, username: a.username || a.email, email: a.email,
+              token: clean, status: 'pending', checkInfo: null,
+              draft: '', jobs: [], added: new Date().toLocaleString(),
+            });
+            if (typeof saveData === 'function') saveData();
+            if (typeof renderAccounts === 'function') renderAccounts();
+            if (typeof updateQuickStats === 'function') updateQuickStats();
+            kcaLog('Added to Accounts tab: ' + (a.username || a.email), 'ok');
+          }
+        } catch (_) {}
+      }
     } else if (d.step === 'failed') {
       KCA_STATE.stats.failed++;
       kcaSetStats();
