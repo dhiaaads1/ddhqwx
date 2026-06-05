@@ -1,0 +1,2606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FLT — Fan Loot Team</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="style.css">
+<style>
+/* ── License info card in Settings ── */
+@keyframes lic-spin { to { transform: rotate(360deg); } }
+.lic-spinner {
+  display: inline-block; width: 9px; height: 9px;
+  border: 2px solid rgba(88,101,242,0.18); border-top-color: var(--blurple, #5865F2);
+  border-radius: 50%; animation: lic-spin 0.7s linear infinite;
+  vertical-align: middle; margin-right: 5px;
+}
+.lic-field { display: flex; flex-direction: column; gap: 3px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.lic-field:last-child { border-bottom: none; padding-bottom: 0; }
+.lic-lbl   { font-family: var(--font-ui, 'Inter', sans-serif); font-size: 9.5px; color: var(--dim); letter-spacing: 1.2px; text-transform: uppercase; font-weight: 600; }
+.lic-val   { font-family: var(--font-ui, 'Inter', sans-serif); font-size: 13px; color: var(--text); font-weight: 500; }
+.lic-val.ok   { color: var(--green, #43b581); }
+.lic-val.warn { color: var(--yel, #ffd166); }
+.lic-val.bad  { color: var(--red, #f04747); }
+
+
+</style>
+<script>
+/* Apply platform body class as early as possible to avoid a flash of
+   the Kick UI when the user previously selected Discord mode. */
+(function () {
+  try {
+    var p = localStorage.getItem('flt_platform');
+    if (p !== 'kick' && p !== 'discord') p = 'kick';
+    document.documentElement.setAttribute('data-platform', p);
+    // Body isn't parsed yet — wait for it.
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.classList.add('platform-' + p);
+    });
+  } catch (_) {}
+})();
+</script>
+</head>
+<body>
+<div id="app-clip">
+
+<!-- TITLEBAR -->
+<div id="electron-titlebar">
+  <div class="tb-brand" title="Copyright © Virus — All rights reserved">
+    <span class="tb-lightning"><i class="bi bi-lightning-charge-fill"></i></span>
+    <span class="tb-brand-name">FLT</span>
+    <span class="tb-brand-ver">v4</span>
+    <span class="tb-brand-by">by Virus</span>
+  </div>
+  <div class="tb-right">
+    <div class="tb-opacity">
+      <span class="tb-opacity-label">OPACITY</span>
+      <input type="range" id="opacitySlider" min="20" max="100" value="92">
+    </div>
+    <div class="tb-sep"></div>
+    <button id="topToggleBtn">TOP</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="tb-min">─</button>
+    <button class="tb-btn" id="tb-max">□</button>
+    <button class="tb-btn tb-btn-close" id="tb-close">✕</button>
+  </div>
+</div>
+
+<div id="notifWrap"></div>
+
+<!-- SIDEBAR -->
+<aside id="sidebar">
+
+  <!-- Platform switcher (Kick / Discord) — controls which nav buttons + pages are visible -->
+  <div class="platform-switch" id="platformSwitch">
+    <button class="ps-btn active" data-platform="kick" type="button">
+      <i class="bi bi-broadcast"></i><span>Kick</span>
+    </button>
+    <button class="ps-btn" data-platform="discord" type="button">
+      <i class="bi bi-discord"></i><span>Discord</span>
+    </button>
+    <button class="ps-btn" data-platform="kik" type="button">
+      <i class="bi bi-chat-dots-fill"></i><span>Kik</span>
+    </button>
+  </div>
+
+  <nav class="nav">
+    <!-- ─── Kick nav buttons ─── -->
+    <button class="nav-btn active" data-tab="spammer" data-platform="kick">
+      <span class="nav-ic"><i class="bi bi-send"></i></span><span>Dispatcher</span>
+    </button>
+    <button class="nav-btn" data-tab="activemode" data-platform="kick">
+      <span class="nav-ic"><i class="bi bi-lightning-charge-fill"></i></span><span>Active Mode</span>
+      <span class="nav-count" id="amBadgeNav" style="display:none;background:rgba(61,255,160,0.2);color:var(--ac)">ON</span>
+    </button>
+    <button class="nav-btn" data-tab="accounts" data-platform="kick">
+      <span class="nav-ic"><i class="bi bi-people"></i></span><span>Accounts</span>
+      <span class="nav-count" id="accCount"></span>
+      <span class="nav-count" id="tokCount" style="margin-left:2px;background:rgba(61,255,160,0.15);color:var(--ac)"></span>
+      <span class="nav-count" id="liveJobsBadge"></span>
+    </button>
+    <button class="nav-btn" data-tab="tools" data-platform="kick">
+      <span class="nav-ic"><i class="bi bi-tools"></i></span><span>Tools</span>
+    </button>
+    <button class="nav-btn" data-tab="automation" data-platform="kick">
+      <span class="nav-ic"><i class="bi bi-robot"></i></span><span>Automation</span>
+    </button>
+    <button class="nav-btn" data-tab="streams" data-platform="kick">
+      <span class="nav-ic"><i class="bi bi-display"></i></span><span>Streams</span>
+      <span class="nav-count" id="streamCount"></span>
+    </button>
+    <button class="nav-btn" data-tab="create-account" data-platform="kick">
+      <span class="nav-ic"><i class="bi bi-person-plus-fill"></i></span><span>Create Account</span>
+      <span class="nav-count" id="kickCreateCount" style="background:rgba(61,255,160,0.15);color:var(--ac)"></span>
+    </button>
+
+    <!-- ─── Discord nav buttons (hidden when Kick is active) ─── -->
+    <button class="nav-btn" data-tab="discord-dashboard" data-platform="discord">
+      <span class="nav-ic"><i class="bi bi-grid-1x2"></i></span><span>Dashboard</span>
+    </button>
+    <button class="nav-btn" data-tab="discord-accounts" data-platform="discord">
+      <span class="nav-ic"><i class="bi bi-people"></i></span><span>Accounts</span>
+      <span class="nav-count" id="dcAccCount"></span>
+    </button>
+
+    <!-- ─── Kik nav buttons ─── -->
+    <button class="nav-btn" data-tab="kik-accounts" data-platform="kik">
+      <span class="nav-ic"><i class="bi bi-people"></i></span><span>Accounts</span>
+      <span class="nav-count" id="kikAccCount"></span>
+    </button>
+    <button class="nav-btn" data-tab="kik-create" data-platform="kik">
+      <span class="nav-ic"><i class="bi bi-person-plus-fill"></i></span><span>Create Account</span>
+    </button>
+    <button class="nav-btn" data-tab="kik-proxies" data-platform="kik">
+      <span class="nav-ic"><i class="bi bi-shield-check"></i></span><span>Proxies</span>
+    </button>
+
+    <!-- ─── Settings (shared across platforms) ─── -->
+    <button class="nav-btn" data-tab="settings" data-platform="shared">
+      <span class="nav-ic"><i class="bi bi-sliders"></i></span><span>Settings</span>
+    </button>
+  </nav>
+  <div class="sidebar-foot">
+    <div id="clock">00:00:00</div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main id="main">
+
+  <!-- ══════════════════════════════════════════
+       MESSAGE DISPATCHER — REDESIGNED
+  ══════════════════════════════════════════ -->
+  <section class="page active" id="page-spammer">
+
+    <!-- ── TOP COMMAND BAR ── -->
+    <div class="dsp-topbar">
+      <div class="dsp-topbar-left">
+        <div class="dsp-title-group">
+          <span class="dsp-title-icon"><i class="bi bi-send-fill"></i></span>
+          <div>
+            <div class="dsp-title">Dispatcher</div>
+            <div class="dsp-subtitle">Broadcast across accounts — controlled, human-like</div>
+          </div>
+        </div>
+      </div>
+      <div class="dsp-topbar-right">
+        <!-- Stats inline in topbar -->
+        <div class="dsp-stat-bar">
+          <div class="dsp-stat green">
+            <span class="dsp-stat-num" id="mdStatSent">0</span>
+            <span class="dsp-stat-lbl">Sent</span>
+          </div>
+          <div class="dsp-stat-sep"></div>
+          <div class="dsp-stat red">
+            <span class="dsp-stat-num" id="mdStatFailed">0</span>
+            <span class="dsp-stat-lbl">Failed</span>
+          </div>
+          <div class="dsp-stat-sep"></div>
+          <div class="dsp-stat yel">
+            <span class="dsp-stat-num" id="mdStatSkipped">0</span>
+            <span class="dsp-stat-lbl">Skipped</span>
+          </div>
+          <button class="dsp-reset-btn" id="mdResetStats" title="Reset stats"><i class="bi bi-arrow-counterclockwise"></i></button>
+        </div>
+        <!-- Action buttons -->
+        <div class="dsp-actions">
+          <button class="btn primary dsp-send-btn" id="mdSendBtn">
+            <i class="bi bi-send-fill"></i> Send Now
+          </button>
+          <button class="btn danger dsp-cancel-btn" id="mdCancelBtn" style="display:none">
+            <i class="bi bi-x-lg"></i> Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CHANNEL STRIP ── -->
+    <div class="dsp-channel-strip">
+      <div class="dsp-channel-icon"><i class="bi bi-broadcast"></i></div>
+      <input id="channelInput" class="inp dsp-channel-input" type="text" placeholder="username or kick.com/username">
+      <button class="btn primary dsp-connect-btn" id="connectBtn"><i class="bi bi-plug"></i> Connect</button>
+      <button class="btn ghost xs" id="followCheckBtn" title="Check which accounts already follow this channel">
+        <i class="bi bi-binoculars"></i> Check Follow Status
+      </button>
+      <button class="btn danger xs" id="followCheckStopBtn" style="display:none">
+        <i class="bi bi-stop-fill"></i> Stop
+      </button>
+      <span id="followCheckProgress" class="acc-health-progress" style="display:none">
+        <span id="followCheckText">0 / 0</span>
+        <span class="acc-health-bar"><span id="followCheckFill"></span></span>
+      </span>
+      <div id="channelStatus" class="dsp-channel-status">● Not connected</div>
+    </div>
+
+    <!-- ── PROGRESS BAR ── -->
+    <div id="mdProgressBar" class="dsp-progress-bar">
+      <span id="mdProgressInfo" class="dsp-progress-info">Ready to broadcast.</span>
+      <span id="mdProgressCount" class="dsp-progress-count"></span>
+    </div>
+
+    <!-- ── MAIN GRID ── -->
+    <div class="dsp-grid">
+
+      <!-- LEFT: Message + Accounts -->
+      <div class="dsp-grid-left">
+
+        <!-- Message panel -->
+        <div class="dsp-panel">
+          <div class="dsp-panel-hd">
+            <i class="bi bi-chat-text"></i>
+            <span>Message</span>
+            <span class="dsp-char-count" id="msgLen">0/500</span>
+          </div>
+          <div class="dsp-panel-body">
+            <textarea id="msgInput" class="inp dsp-textarea" rows="4" maxlength="500"
+              placeholder="Type your message…"></textarea>
+            <div id="emoteBar" class="dsp-emote-bar"></div>
+            <label class="dsp-tog-row">
+              <span class="dsp-tog-label">Smart variation</span>
+              <span class="dsp-tog-desc">subtle per-account tweak to avoid duplicates</span>
+              <label class="tog dsp-tog-right">
+                <input type="checkbox" id="chkVariation">
+                <span class="tog-track"><span class="tog-knob"></span></span>
+              </label>
+            </label>
+          </div>
+          <!-- hidden compat -->
+          <input type="checkbox" id="chkAntiDup" checked style="display:none">
+        </div>
+
+        <!-- Accounts panel -->
+        <div class="dsp-panel">
+          <div class="dsp-panel-hd">
+            <i class="bi bi-people"></i>
+            <span>Account Pool</span>
+          </div>
+          <div class="dsp-panel-body">
+            <!-- Segmented buttons replacing the dropdown -->
+            <div class="dsp-seg-group">
+              <button class="dsp-seg active" data-val="all" onclick="dspSetAccMode(this,'all')">All</button>
+              <button class="dsp-seg" data-val="valid" onclick="dspSetAccMode(this,'valid')">Valid Only</button>
+              <button class="dsp-seg" data-val="custom" onclick="dspSetAccMode(this,'custom')">Custom</button>
+            </div>
+            <!-- Hidden real select kept for JS compatibility -->
+            <select id="mdAccMode" style="display:none">
+              <option value="all">All Accounts</option>
+              <option value="valid">Valid Only</option>
+              <option value="custom">Custom Selection</option>
+            </select>
+            <div id="mdCustomHint" class="dsp-custom-hint" style="display:none">
+              <i class="bi bi-info-circle"></i>
+              Select accounts in the <b>Accounts</b> tab, then return here.
+              <span id="mdCustomCount" class="dsp-custom-count">0 selected</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /dsp-grid-left -->
+
+      <!-- RIGHT: Settings + Broadcast -->
+      <div class="dsp-grid-right">
+
+        <!-- Broadcast settings panel -->
+        <div class="dsp-panel">
+          <div class="dsp-panel-hd">
+            <i class="bi bi-sliders"></i>
+            <span>Broadcast Settings</span>
+          </div>
+          <div class="dsp-panel-body">
+            <div class="dsp-setting-row">
+              <div class="dsp-setting-info">
+                <span class="dsp-setting-name">Duration</span>
+                <span class="dsp-setting-desc">Spread sends across window (0 = instant)</span>
+              </div>
+              <div class="dsp-duration-wrap">
+                <input id="mdDuration" class="inp dsp-num-input" type="number" value="10" min="0" step="1">
+                <span class="dsp-unit">sec</span>
+              </div>
+            </div>
+            <div class="dsp-divider"></div>
+            <label class="dsp-tog-row">
+              <span class="dsp-tog-label">Skip invalid</span>
+              <span class="dsp-tog-desc">bypass accounts without valid tokens</span>
+              <label class="tog dsp-tog-right">
+                <input type="checkbox" id="mdSkipInvalid" checked>
+                <span class="tog-track"><span class="tog-knob"></span></span>
+              </label>
+            </label>
+            <label class="dsp-tog-row">
+              <span class="dsp-tog-label">Shuffle order</span>
+              <span class="dsp-tog-desc">randomise account sequence before send</span>
+              <label class="tog dsp-tog-right">
+                <input type="checkbox" id="mdShuffle">
+                <span class="tog-track"><span class="tog-knob"></span></span>
+              </label>
+            </label>
+          </div>
+        </div>
+
+      </div><!-- /dsp-grid-right -->
+
+    </div><!-- /dsp-grid -->
+
+    <!-- ── ACTIVITY LOG ── -->
+    <div class="dsp-log-panel">
+      <div class="dsp-log-hd">
+        <div class="dsp-log-title">
+          <span class="dsp-log-dot"></span>
+          Activity Log
+        </div>
+        <button class="btn ghost xs" id="mdClearLog"><i class="bi bi-trash"></i> Clear</button>
+      </div>
+      <div id="mdLog" class="dsp-log">
+        <span class="dsp-log-empty">No activity yet — press Send Now to begin.</span>
+      </div>
+    </div>
+
+    <!-- hidden compat -->
+    <span id="stStatus" style="display:none">Idle</span>
+
+  </section>
+
+  <script>
+  /* Segmented button → hidden select sync (dispatcher only) */
+  function dspSetAccMode(btn, val) {
+    document.querySelectorAll('.dsp-seg').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const sel = document.getElementById('mdAccMode');
+    if (sel) { sel.value = val; sel.dispatchEvent(new Event('change')); }
+  }
+  </script>
+
+
+
+  <!-- ══════════════════════════════════════════
+       ACTIVE MODE — REDESIGNED
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-activemode">
+
+    <!-- TOP COMMAND BAR -->
+    <div class="am2-topbar">
+      <div class="am2-topbar-left">
+        <div class="am2-title-group">
+          <div class="am2-title-icon">
+            <span class="am2-status-dot" id="activeDot"></span>
+          </div>
+          <div>
+            <div class="am2-title">
+              Active Mode
+              <span class="am2-running-badge" id="activeBadge" style="display:none">RUNNING</span>
+            </div>
+            <div class="am2-subtitle">AI rotation · live chat · per-account engine</div>
+          </div>
+        </div>
+      </div>
+      <div class="am2-topbar-right">
+        <div class="am2-stat-bar">
+          <div class="am2-stat green">
+            <span class="am2-stat-num" id="amSent">0</span>
+            <span class="am2-stat-lbl">Sent</span>
+          </div>
+          <div class="am2-stat-sep"></div>
+          <div class="am2-stat red">
+            <span class="am2-stat-num" id="amFailed">0</span>
+            <span class="am2-stat-lbl">Failed</span>
+          </div>
+          <div class="am2-stat-sep"></div>
+          <div class="am2-stat red">
+            <span class="am2-stat-num" id="amBanned">0</span>
+            <span class="am2-stat-lbl">Banned</span>
+          </div>
+          <div class="am2-stat-sep"></div>
+          <div class="am2-stat ac">
+            <span class="am2-stat-num" id="amNext">&#8212;</span>
+            <span class="am2-stat-lbl">Next in</span>
+          </div>
+          <div class="am2-stat-sep"></div>
+          <div class="am2-last-pill">
+            <i class="bi bi-arrow-up-right am2-last-icon"></i>
+            <span class="am2-last-acc" id="amLastAcc">&#8212;</span>
+            <span class="am2-last-sep">&#8250;</span>
+            <span class="am2-last-msg" id="amLastMsg">waiting for first send...</span>
+          </div>
+        </div>
+        <div class="am2-controls">
+          <button id="amTurbo" class="am2-turbo-btn" title="Turbo Mode" onclick="amTurboToggle()">&#9889; TURBO</button>
+          <button class="btn danger am-ctrl-btn" id="amStopBtn" style="display:none">
+            <i class="bi bi-stop-fill"></i> Stop
+          </button>
+          <button class="btn success am2-start-btn" id="amStartBtn">
+            <i class="bi bi-play-fill"></i> Start
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BODY -->
+    <div class="am2-body">
+
+      <!-- LEFT SIDEBAR -->
+      <div class="am2-sidebar">
+
+        <!-- DeepSeek AI -->
+        <div class="am2-panel" id="activeModeCard">
+          <div class="am2-panel-hd">
+            <div class="am2-panel-hd-left">
+              <span class="am2-panel-icon ai"><i class="bi bi-robot"></i></span>
+              <div>
+                <div class="am2-panel-title">DeepSeek AI</div>
+                <div class="am2-panel-sub">Context-aware generation</div>
+              </div>
+            </div>
+            <div class="am2-panel-hd-right">
+              <span id="amAiBadge" class="am2-ai-badge">idle</span>
+              <div class="am2-ai-counters">
+                <span class="am2-ai-ct green">&#10003;<b id="amAiGenCount">0</b></span>
+                <span class="am2-ai-ct dim">&#129296;<b id="amAiSilCount">0</b></span>
+                <span class="am2-ai-ct red">&#10007;<b id="amAiErrCount">0</b></span>
+                <span class="am2-ai-ct dim"><i class="bi bi-chat-dots"></i><b id="amAiContextCount">0</b></span>
+              </div>
+            </div>
+          </div>
+          <div class="am2-panel-body">
+            <div class="am2-field">
+              <label class="am2-lbl">API KEY</label>
+              <input id="amAiApiKey" class="inp am2-inp" type="password" placeholder="sk-..." autocomplete="off">
+            </div>
+            <div class="am2-row2">
+              <div class="am2-field">
+                <label class="am2-lbl">CONTEXT</label>
+                <input id="amAiContextSize" class="inp am2-inp" type="number" value="15" min="3" max="30">
+              </div>
+              <div class="am2-field">
+                <label class="am2-lbl">TOPIC / N</label>
+                <input id="amAiTopicEvery" class="inp am2-inp" type="number" value="5" min="1" max="20">
+              </div>
+            </div>
+            <div class="am2-topic-bar">
+              <i class="bi bi-hash am2-topic-icon"></i>
+              <span id="amAiTopic" class="am2-topic-text">detecting...</span>
+              <button id="amAiRefreshTopicBtn" class="am2-topic-refresh" title="Force refresh topic">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            </div>
+            <div class="am2-field">
+              <label class="am2-lbl">LIVE BUFFER</label>
+              <div id="amAiBufferFeed" class="am2-buffer-feed">
+                <span style="color:var(--dim)">Waiting for chat...</span>
+              </div>
+            </div>
+            <div class="am2-last-gen">
+              <i class="bi bi-sparkle am2-last-gen-icon"></i>
+              <span id="amAiLastMsg" class="am2-last-gen-text">&#8212;</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Speed & Timing -->
+        <div class="am2-panel">
+          <div class="am2-panel-hd">
+            <div class="am2-panel-hd-left">
+              <span class="am2-panel-icon speed"><i class="bi bi-speedometer2"></i></span>
+              <div>
+                <div class="am2-panel-title">Speed &amp; Timing</div>
+                <div class="am2-panel-sub">Delay &middot; pace &middot; humanisation</div>
+              </div>
+            </div>
+          </div>
+          <div class="am2-panel-body">
+            <div class="am2-field">
+              <label class="am2-lbl">SPEED MODE</label>
+              <select id="amMode" class="inp am2-inp sel">
+                <option value="fast">&#9889; Fast (1-1.5s)</option>
+                <option value="normal" selected>&#9670; Normal (1.5-3s)</option>
+                <option value="slow">&#128034; Slow (3-6s)</option>
+              </select>
+            </div>
+            <div class="am2-row3">
+              <div class="am2-field">
+                <label class="am2-lbl">MIN (s)</label>
+                <input id="amDelayMin" class="inp am2-inp" type="number" value="2" min="1" max="120" step="0.5">
+              </div>
+              <div class="am2-field">
+                <label class="am2-lbl">MAX (s)</label>
+                <input id="amDelayMax" class="inp am2-inp" type="number" value="4" min="1" max="120" step="0.5">
+              </div>
+              <div class="am2-field am2-tog-field">
+                <label class="am2-lbl">HUMANISE</label>
+                <label class="tog">
+                  <input type="checkbox" id="amThinking" checked>
+                  <span class="tog-track"><span class="tog-knob"></span></span>
+                  <span style="font-size:11px">Think</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accounts -->
+        <div class="am2-panel">
+          <div class="am2-panel-hd">
+            <div class="am2-panel-hd-left">
+              <span class="am2-panel-icon accs"><i class="bi bi-people-fill"></i></span>
+              <div>
+                <div class="am2-panel-title">Accounts</div>
+                <div class="am2-panel-sub">Rotation &amp; options</div>
+              </div>
+            </div>
+          </div>
+          <div class="am2-panel-body">
+            <div class="am2-row2">
+              <div class="am2-field" style="flex:1;min-width:0">
+                <label class="am2-lbl">ACCOUNT</label>
+                <select id="amAccount" class="inp am2-inp sel">
+                  <option value="random">&#128256; Random</option>
+                </select>
+              </div>
+              <div class="am2-field">
+                <label class="am2-lbl">PER TICK</label>
+                <input id="amMultiSend" class="inp am2-inp" type="number" value="1" min="1" max="10">
+              </div>
+            </div>
+            <div class="am2-tog-strip">
+              <label class="am2-tog-row">
+                <span class="am2-tog-label">Emote</span>
+                <label class="tog">
+                  <input type="checkbox" id="amUseEmotes">
+                  <span class="tog-track"><span class="tog-knob"></span></span>
+                </label>
+              </label>
+              <label class="am2-tog-row">
+                <span class="am2-tog-label">Stop on ban</span>
+                <label class="tog">
+                  <input type="checkbox" id="amStopOnBan">
+                  <span class="tog-track"><span class="tog-knob"></span></span>
+                </label>
+              </label>
+              <span class="am2-ai-queue-pill">
+                <i class="bi bi-robot"></i> AI: <b id="amQueueLeft" style="color:var(--ac)">&#8212;</b>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Send History -->
+        <div class="am2-panel">
+          <div class="am2-panel-hd">
+            <div class="am2-panel-hd-left">
+              <span class="am2-panel-icon hist"><i class="bi bi-journal-text"></i></span>
+              <div>
+                <div class="am2-panel-title">Send History</div>
+                <div class="am2-panel-sub">Last messages sent</div>
+              </div>
+            </div>
+            <button class="am2-clear-btn" id="amClearHistory">Clear</button>
+          </div>
+          <div class="am2-panel-body" style="padding:8px 14px">
+            <div id="amHistory" class="am2-history-log">
+              <span style="color:var(--dim);font-size:10px">No sends yet</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: LIVE CHAT -->
+      <div class="am2-chat-col">
+
+        <div class="am2-chat-hd">
+          <div class="am2-chat-title">
+            <span class="am2-live-pulse"></span>
+            Live Chat
+          </div>
+          <div class="am2-chat-controls">
+            <span id="liveChatStatus" class="am2-conn-pill">
+              <span id="liveChatDot" class="am2-conn-dot"></span>
+              <span class="am-conn-label">Disconnected</span>
+            </span>
+            <select id="lcMsgLimit" class="am2-limit-sel" title="Max messages shown">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="200">200</option>
+            </select>
+            <button class="btn ghost xs" id="liveChatConnectBtn"><i class="bi bi-plug"></i><span class="am-btn-label"> Connect</span></button>
+            <button class="btn ghost xs" id="liveChatDisconnectBtn" style="display:none"><i class="bi bi-x-lg"></i></button>
+            <button class="btn ghost xs" id="liveChatClearBtn" title="Clear"><i class="bi bi-trash"></i></button>
+          </div>
+        </div>
+
+        <div id="liveChatChannelBar" class="am2-channel-bar" style="display:none">
+          <img id="liveChatAvatar" src="" alt="" class="am2-ch-avatar">
+          <span id="liveChatChannelName" class="am2-ch-name"></span>
+          <span class="am2-ch-sep">&middot;</span>
+          <span id="liveChatViewers" class="am2-ch-meta"><i class="bi bi-eye"></i> &#8212;</span>
+          <span class="am2-ch-sep">&middot;</span>
+          <span id="liveChatMsgCount" class="am2-ch-meta">0 msgs</span>
+        </div>
+
+        <div id="liveChatFeed" class="am2-feed">
+          <div class="am2-feed-empty">
+            <i class="bi bi-broadcast am2-feed-empty-icon"></i>
+            <span>Connect to a channel to see live chat</span>
+          </div>
+        </div>
+
+        <div class="am2-composer">
+          <select id="liveChatSendAs" class="inp sel am2-composer-acc">
+            <option value="">&#8212; Account &#8212;</option>
+          </select>
+          <input id="liveChatInput" class="inp am2-composer-input" type="text" placeholder="Type a message..." maxlength="500">
+          <button class="btn primary am2-send-icon-btn" id="liveChatSendBtn">
+            <i class="bi bi-send-fill"></i>
+          </button>
+        </div>
+        <div id="liveChatInputHint" class="am2-composer-hint">Select an account to send messages as</div>
+
+      </div>
+
+    </div>
+  </section>
+
+
+
+  <section class="page" id="page-accounts">
+
+    <!-- TOP COMMAND BAR -->
+    <div class="acc-topbar">
+      <div class="acc-topbar-left">
+        <div class="acc-title-group">
+          <div class="acc-title-icon"><i class="bi bi-people-fill"></i></div>
+          <div>
+            <div class="acc-title">Accounts</div>
+            <div class="acc-subtitle">Manage Kick.com accounts and tokens</div>
+          </div>
+        </div>
+      </div>
+      <div class="acc-topbar-right">
+        <!-- Stats pill -->
+        <div class="acc-stat-bar">
+          <div class="acc-stat green">
+            <span class="acc-stat-num" id="qsValid">0</span>
+            <span class="acc-stat-lbl">Valid</span>
+          </div>
+          <div class="acc-stat-sep"></div>
+          <div class="acc-stat red">
+            <span class="acc-stat-num" id="qsInvalid">0</span>
+            <span class="acc-stat-lbl">Invalid</span>
+          </div>
+          <div class="acc-stat-sep"></div>
+          <div class="acc-stat blue">
+            <span class="acc-stat-num" id="qsJobs">0</span>
+            <span class="acc-stat-lbl">Running</span>
+          </div>
+          <div class="acc-stat-sep"></div>
+          <div class="acc-stat yel">
+            <span class="acc-stat-num" id="qsDrafts">0</span>
+            <span class="acc-stat-lbl">With Draft</span>
+          </div>
+        </div>
+        <!-- Primary actions -->
+        <div class="acc-actions">
+          <button class="btn primary acc-add-btn" id="addAccBtn">
+            <i class="bi bi-plus-lg"></i> Add Account
+          </button>
+          <button class="btn ghost acc-batch-btn" id="batchAccBtn">
+            <i class="bi bi-upload"></i> Batch
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTROL STRIP -->
+    <div class="acc-control-strip">
+      <!-- Filter tabs -->
+      <div class="acc-filter-tabs">
+        <button class="acc-fil fil active" data-f="all">All <b id="fAll">0</b></button>
+        <button class="acc-fil fil" data-f="valid">Valid <b id="fValid">0</b></button>
+        <button class="acc-fil fil" data-f="invalid">Invalid <b id="fInvalid">0</b></button>
+        <button class="acc-fil fil" data-f="running">Running <b id="fRunning">0</b></button>
+      </div>
+
+      <!-- Start All group -->
+      <div class="acc-run-group">
+        <span class="acc-run-label">Interval</span>
+        <input type="number" id="randMin" class="inp acc-interval-inp" value="10" min="1" max="3600" title="Min seconds">
+        <span class="acc-run-sep">&#8211;</span>
+        <input type="number" id="randMax" class="inp acc-interval-inp" value="25" min="1" max="3600" title="Max seconds">
+        <span class="acc-run-sep">s</span>
+        <button class="btn primary acc-start-all-btn" id="startAllBtn">
+          <i class="bi bi-play-fill"></i> Start All
+        </button>
+        <button class="btn danger acc-stop-all-btn" id="stopAllAccBtn" style="display:none">
+          <i class="bi bi-stop-fill"></i> Stop All
+        </button>
+        <button class="btn ghost xs" id="accHealthBtn" title="Validate every token against Kick's API">
+          <i class="bi bi-heart-pulse"></i> Check Health
+        </button>
+        <button class="btn danger xs" id="accHealthStopBtn" style="display:none" title="Stop the in-progress health scan">
+          <i class="bi bi-stop-fill"></i> Stop Check
+        </button>
+        <span id="accHealthProgress" class="acc-health-progress" style="display:none">
+          <span id="accHealthText">0 / 0</span>
+          <span class="acc-health-bar"><span id="accHealthFill"></span></span>
+        </span>
+      </div>
+
+      <!-- Selection actions (shown when rows selected) -->
+      <div class="acc-sel-actions">
+        <button class="btn success xs" id="startSelBtn" style="display:none">
+          <i class="bi bi-play-fill"></i> Start Selected
+        </button>
+        <button class="btn danger xs" id="delSelBtn" style="display:none">
+          <i class="bi bi-trash"></i> Delete
+        </button>
+        <span id="accSelCount" class="acc-sel-badge" style="display:none"></span>
+        <button class="btn ghost xs acc-sel-helper" id="accSelAll" title="Select all"><i class="bi bi-check2-all"></i></button>
+        <button class="btn ghost xs acc-sel-helper" id="accSelNone" title="Select none"><i class="bi bi-x-lg"></i></button>
+        <button class="btn ghost xs acc-sel-helper" id="accSelVisible" title="Select visible"><i class="bi bi-funnel"></i></button>
+      </div>
+
+      <!-- Search -->
+      <input id="accSearch" class="inp acc-search" type="text"
+             placeholder="&#128269; Search accounts..."
+             autocomplete="off">
+    </div>
+
+    <!-- TABLE -->
+    <div class="acc-table-wrap">
+      <table class="acc-tbl">
+        <thead>
+          <tr>
+            <th class="acc-th-chk"><input type="checkbox" id="chkAll" class="chk" title="Check/uncheck all"></th>
+            <th>Account</th>
+            <th>Draft</th>
+            <th>Token</th>
+            <th>Status</th>
+            <th>Jobs</th>
+            <th>Added</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="accBody"></tbody>
+      </table>
+      <div id="accEmpty" class="acc-empty" style="display:none">
+        <i class="bi bi-people acc-empty-icon"></i>
+        <div class="acc-empty-title">No accounts yet</div>
+        <div class="acc-empty-sub">Click <b>Add Account</b> to get started</div>
+      </div>
+    </div>
+
+    <!-- Wire selection helpers + startSelBtn — these were missing event listeners -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var $ = function(id) { return document.getElementById(id); };
+      $('accSelAll')    && $('accSelAll').addEventListener('click',    function(){ accSelectAll();     renderAccounts(); });
+      $('accSelNone')   && $('accSelNone').addEventListener('click',   function(){ accSelectNone();    renderAccounts(); });
+      $('accSelVisible')&& $('accSelVisible').addEventListener('click',function(){ accSelectVisible(); renderAccounts(); });
+      $('startSelBtn')  && $('startSelBtn').addEventListener('click',  function(){ startSelectedAutoSend(); });
+    });
+    </script>
+
+    <!-- Hidden stubs for JS compatibility -->
+    <button id="followBotToggleBtn" style="display:none"></button>
+    <button id="reactivateAllBtn"   style="display:none"></button>
+    <button id="deleteAllBtn"       style="display:none"></button>
+    <span   id="qsSentTotal"        style="display:none"></span>
+    <!-- Keep old stat IDs alive for any JS that reads them -->
+    <div id="quickStatsBar" style="display:none">
+      <div class="qs-chip green"><span class="qs-val" style="display:none"></span></div>
+    </div>
+
+  </section>
+
+
+
+  <!-- ══════════════════════════════════════════
+       TOOLS — Message System (Merged)
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-tools">
+    <div class="page-head">
+      <h1>Message System</h1>
+      <p>Smart bulk messaging with slot integration and format builder</p>
+    </div>
+
+    <!-- ── Global Tag ────────────────────────────────────────────────
+         Appended to ALL account messages when any tool writes drafts  -->
+    <div class="card" id="globalTagCard" style="padding:14px 16px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:7px;min-width:0">
+          <i class="bi bi-tag-fill" style="color:var(--ac,#3dffa0);font-size:13px;flex-shrink:0"></i>
+          <span style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap">Global Tag</span>
+          <span style="font-size:10px;color:var(--dim)">— appended to every message written by any tool</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap">
+          <input id="globalTagInput" class="inp" style="height:30px;font-size:12px;width:180px;font-weight:600"
+            placeholder="e.g. @username" autocomplete="off" spellcheck="false">
+          <button class="btn ghost xs" id="globalTagClearBtn" title="Clear tag"><i class="bi bi-x-lg"></i></button>
+          <div style="width:1px;height:22px;background:var(--border);margin:0 2px"></div>
+          <button class="btn primary xs" id="globalTagApplyNowBtn" title="Append this tag to all accounts that already have a draft message">
+            <i class="bi bi-check-all"></i> Apply to Existing
+          </button>
+        </div>
+      </div>
+      <div id="globalTagStatus" style="font-size:10px;color:var(--dim);margin-top:7px;display:none"></div>
+    </div>
+
+    <div class="card" id="msgSystemCard" style="padding:0">
+
+      <!-- ── Mode Tabs ───────────────────────────────────────────── -->
+      <div class="ms-tabs">
+        <button class="ms-tab active" id="msTabSlots" data-mode="slots">
+          <i class="bi bi-dice-5-fill"></i> Slot Generator
+        </button>
+        <button class="ms-tab" id="msTabBulk" data-mode="bulk">
+          <i class="bi bi-chat-left-text-fill"></i> Bulk Messages
+        </button>
+      </div>
+
+      <!-- ══════════════════════════════════════
+           SLOT MODE
+      ══════════════════════════════════════ -->
+      <div id="msPanelSlots">
+
+        <!-- 1. Account Source -->
+        <div class="ms-section" id="msAccSection">
+          <div class="ms-section-head">
+            <span class="ms-step-num">1</span>
+            <span class="ms-section-title"><i class="bi bi-people-fill"></i> Account Source</span>
+            <span id="msAccBadge" class="ms-badge">0 accounts</span>
+          </div>
+          <div class="ms-section-body">
+            <div class="ms-radio-row">
+              <label class="ms-radio-label">
+                <input type="radio" name="msAccMode" value="all" id="msAccAll" checked>
+                <span class="ms-radio-btn"></span>All Accounts
+              </label>
+              <label class="ms-radio-label">
+                <input type="radio" name="msAccMode" value="valid" id="msAccValid">
+                <span class="ms-radio-btn"></span>Valid Only
+                <span class="ms-radio-hint">token &amp; not banned</span>
+              </label>
+              <label class="ms-radio-label">
+                <input type="radio" name="msAccMode" value="custom" id="msAccCustom">
+                <span class="ms-radio-btn"></span>Custom Selection
+              </label>
+            </div>
+            <div id="msCustomList" style="display:none;margin-top:12px;padding:12px;background:var(--s2);border-radius:8px;border:1px solid var(--border)">
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+                <span style="font-size:10px;font-weight:600;color:var(--dim);flex:1">SELECT ACCOUNTS</span>
+                <button class="btn ghost xs" id="msSelectAllBtn"><i class="bi bi-check-all"></i> All</button>
+                <button class="btn ghost xs" id="msClearSelBtn"><i class="bi bi-x"></i> None</button>
+                <span id="msCustomCount" style="font-size:10px;color:var(--blue);font-weight:600;min-width:60px;text-align:right">0 selected</span>
+              </div>
+              <div id="msAccChecklist" class="ms-checklist"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ms-divider"></div>
+
+        <!-- 2. Slots — fetch or manual -->
+        <div class="ms-section">
+          <div class="ms-section-head">
+            <span class="ms-step-num">2</span>
+            <span class="ms-section-title"><i class="bi bi-dice-5-fill" style="color:var(--purple,#a855f7)"></i> Slots</span>
+            <span id="msSlotCount" class="ms-badge">0 slots</span>
+            <span id="slotPickerStatus" style="font-size:10px;color:var(--dim);margin-left:6px">Ready</span>
+          </div>
+          <div class="ms-section-body">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+              <span style="font-size:10px;font-weight:600;color:var(--dim)">PLATFORM:</span>
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
+                <input type="radio" name="slotPlatform" value="rainbet_shuffle" id="spRainbet" checked>
+                <span>Rainbet &amp; Shuffle</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
+                <input type="radio" name="slotPlatform" value="stake" id="spStake">
+                <span>Stake</span>
+              </label>
+              <button class="btn primary xs" id="msSlotFetchBtn" style="margin-left:auto"><i class="bi bi-cloud-download"></i> Fetch Slots</button>
+            </div>
+            <div id="slotPlatformHint" style="font-size:10px;color:var(--dim);margin-bottom:10px;padding:6px 10px;background:var(--s2);border-radius:6px;line-height:1.5">
+              <span id="slotPlatformHintText">Providers: Pragmatic Play · Hacksaw Gaming · Backseat Gaming · No Limit City · BGaming — Bonus Buy only</span>
+            </div>
+            <textarea id="msSlotInput" class="inp bulk-textarea" rows="4"
+              placeholder="Slots auto-fill after Fetch · or type manually, one per line&#10;e.g. Gates of Olympus&#10;Sweet Bonanza"></textarea>
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button class="btn ghost xs" id="msSlotClearBtn"><i class="bi bi-x-lg"></i> Clear</button>
+              <span style="font-size:10px;color:var(--dim);align-self:center">Duplicates removed · one slot auto-assigned per account</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ms-divider"></div>
+
+        <!-- 3. Format Builder — slot-focused -->
+        <div class="ms-section">
+          <div class="ms-section-head">
+            <span class="ms-step-num">3</span>
+            <span class="ms-section-title"><i class="bi bi-braces"></i> Format Builder</span>
+            <span id="msFmtCount" class="ms-badge">0 formats</span>
+          </div>
+          <div class="ms-section-body">
+            <div style="font-size:10px;color:var(--dim);margin-bottom:8px;line-height:1.9">
+              Tags:
+              <code class="ms-tag">{slot}</code>
+              <code class="ms-tag">{emoji}</code>
+              <code class="ms-tag">{index}</code>
+              <code class="ms-tag">{random}</code>
+            </div>
+            <div id="msFmtList" class="ms-fmt-list"></div>
+            <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+              <input id="msFmtNewInput" class="inp" style="height:30px;font-size:11px;flex:1" placeholder="e.g. {slot} {emoji}  or  [{slot}] {emoji} {emoji}">
+              <button class="btn ghost xs" id="msFmtAddBtn"><i class="bi bi-plus-lg"></i> Add</button>
+              <button class="btn ghost xs" id="msFmtResetBtn"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ms-divider"></div>
+
+        <!-- 4. Shuffle -->
+        <div class="ms-section">
+          <div class="ms-section-head">
+            <span class="ms-step-num">4</span>
+            <span class="ms-section-title"><i class="bi bi-shuffle"></i> Shuffle</span>
+          </div>
+          <div class="ms-section-body">
+            <div class="ms-toggle-row">
+              <label class="ms-toggle-label">
+                <input type="checkbox" id="msShufSlot" class="ms-toggle-chk">
+                <span class="ms-toggle-track"><span class="ms-toggle-thumb"></span></span>
+                Shuffle Slots
+              </label>
+              <label class="ms-toggle-label">
+                <input type="checkbox" id="msShufFmt" class="ms-toggle-chk">
+                <span class="ms-toggle-track"><span class="ms-toggle-thumb"></span></span>
+                Shuffle Formats
+              </label>
+              <label class="ms-toggle-label" style="gap:6px">
+                Case:
+                <select id="msCaseMode" class="inp sel" style="font-size:11px;padding:3px 6px;height:auto">
+                  <option value="">Default</option>
+                  <option value="lower">lowercase</option>
+                  <option value="upper">UPPERCASE</option>
+                  <option value="title">Capitalized</option>
+                  <option value="random">&#x1F3B2; Random</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="ms-divider"></div>
+
+        <!-- 5. Output Preview (Slots) -->
+        <div class="ms-section">
+          <div class="ms-section-head">
+            <span class="ms-step-num">5</span>
+            <span class="ms-section-title"><i class="bi bi-eye-fill"></i> Preview</span>
+            <span id="msTotalCount" class="ms-badge">0 generated</span>
+            <button class="btn primary xs" id="msGenerateBtn" style="margin-left:auto"><i class="bi bi-play-fill"></i> Generate</button>
+          </div>
+          <div class="ms-section-body">
+            <div id="msOutputWrap" style="display:none">
+              <div id="msOutputList" class="ms-output-list"></div>
+              <div id="msOutputMore" style="font-size:10px;color:var(--dim);margin-top:6px;text-align:center"></div>
+            </div>
+            <div id="msOutputEmpty" style="font-size:11px;color:var(--dim);padding:8px 0">Press <b>Generate</b> to preview output</div>
+          </div>
+        </div>
+
+        <!-- Apply Bar (Slots) -->
+        <div class="ms-apply-bar">
+          <span id="msApplyInfo" style="font-size:11px;color:var(--dim)">Generate first, then apply to accounts</span>
+          <button class="btn primary" id="msApplyBtn" disabled><i class="bi bi-check-all"></i> Apply to Accounts</button>
+        </div>
+
+      </div><!-- /msPanelSlots -->
+
+      <!-- ══════════════════════════════════════
+           BULK MODE
+      ══════════════════════════════════════ -->
+      <div id="msPanelBulk" style="display:none">
+
+        <!-- 1. Account Source (bulk) — same filter, separate badge -->
+        <div class="ms-section">
+          <div class="ms-section-head">
+            <span class="ms-step-num">1</span>
+            <span class="ms-section-title"><i class="bi bi-people-fill"></i> Account Source</span>
+            <span id="msBulkAccBadge" class="ms-badge">0 accounts</span>
+          </div>
+          <div class="ms-section-body">
+            <div class="ms-radio-row">
+              <label class="ms-radio-label">
+                <input type="radio" name="msBulkAccMode" value="all" id="msBulkAccAll" checked>
+                <span class="ms-radio-btn"></span>All Accounts
+              </label>
+              <label class="ms-radio-label">
+                <input type="radio" name="msBulkAccMode" value="valid" id="msBulkAccValid">
+                <span class="ms-radio-btn"></span>Valid Only
+                <span class="ms-radio-hint">token &amp; not banned</span>
+              </label>
+              <label class="ms-radio-label">
+                <input type="radio" name="msBulkAccMode" value="custom" id="msBulkAccCustom">
+                <span class="ms-radio-btn"></span>Custom Selection
+              </label>
+            </div>
+            <div id="msBulkCustomList" style="display:none;margin-top:12px;padding:12px;background:var(--s2);border-radius:8px;border:1px solid var(--border)">
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+                <span style="font-size:10px;font-weight:600;color:var(--dim);flex:1">SELECT ACCOUNTS</span>
+                <button class="btn ghost xs" id="msBulkSelAllBtn"><i class="bi bi-check-all"></i> All</button>
+                <button class="btn ghost xs" id="msBulkSelNoneBtn"><i class="bi bi-x"></i> None</button>
+                <span id="msBulkCustomCount" style="font-size:10px;color:var(--blue);font-weight:600;min-width:60px;text-align:right">0 selected</span>
+              </div>
+              <div id="msBulkChecklist" class="ms-checklist"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ms-divider"></div>
+
+        <!-- 2. Your messages — 1 per line, cycles across accounts -->
+        <div class="ms-section">
+          <div class="ms-section-head">
+            <span class="ms-step-num">2</span>
+            <span class="ms-section-title"><i class="bi bi-chat-left-text-fill"></i> Your Messages</span>
+            <span id="msBulkMsgCount" class="ms-badge">0 messages</span>
+          </div>
+          <div class="ms-section-body">
+            <textarea id="msBulkMsgInput" class="inp bulk-textarea" rows="7"
+              placeholder="Type one message per line&#10;Account 1 gets line 1, account 2 gets line 2…&#10;If fewer lines than accounts, lines cycle from the start&#10;&#10;Example:&#10;yo guys check this out&#10;big W today&#10;lets gooo"></textarea>
+            <div style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap">
+              <button class="btn ghost xs" id="msBulkClearBtn"><i class="bi bi-x-lg"></i> Clear</button>
+              <label class="ms-toggle-label" style="margin-left:auto">
+                <input type="checkbox" id="msBulkShuf" class="ms-toggle-chk">
+                <span class="ms-toggle-track"><span class="ms-toggle-thumb"></span></span>
+                Shuffle order
+              </label>
+              <label class="ms-toggle-label" style="gap:6px">
+                Case:
+                <select id="msBulkCaseMode" class="inp sel" style="font-size:11px;padding:3px 6px;height:auto">
+                  <option value="">Default</option>
+                  <option value="lower">lowercase</option>
+                  <option value="upper">UPPERCASE</option>
+                  <option value="title">Capitalized</option>
+                  <option value="random">&#x1F3B2; Random</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="ms-divider"></div>
+
+        <!-- 3. Preview + Apply (Bulk) -->
+        <div class="ms-section">
+          <div class="ms-section-head">
+            <span class="ms-step-num">3</span>
+            <span class="ms-section-title"><i class="bi bi-eye-fill"></i> Preview</span>
+            <span id="msBulkTotalCount" class="ms-badge">0 generated</span>
+            <button class="btn primary xs" id="msBulkGenerateBtn" style="margin-left:auto"><i class="bi bi-play-fill"></i> Generate</button>
+          </div>
+          <div class="ms-section-body">
+            <div id="msBulkOutputWrap" style="display:none">
+              <div id="msBulkOutputList" class="ms-output-list"></div>
+              <div id="msBulkOutputMore" style="font-size:10px;color:var(--dim);margin-top:6px;text-align:center"></div>
+            </div>
+            <div id="msBulkOutputEmpty" style="font-size:11px;color:var(--dim);padding:8px 0">Press <b>Generate</b> to preview output</div>
+          </div>
+        </div>
+
+        <!-- Apply Bar (Bulk) -->
+        <div class="ms-apply-bar">
+          <span id="msBulkApplyInfo" style="font-size:11px;color:var(--dim)">Generate first, then apply to accounts</span>
+          <button class="btn primary" id="msBulkApplyBtn" disabled><i class="bi bi-check-all"></i> Apply to Accounts</button>
+        </div>
+
+      </div><!-- /msPanelBulk -->
+
+    </div><!-- /msgSystemCard -->
+
+    <!-- Keep legacy IDs alive (other code references these) -->
+    <div style="display:none">
+      <textarea id="bulkMsgInput"></textarea>
+      <div id="bulkPreview"></div>
+      <div id="bulkLineCount"></div>
+      <span id="slotGenStatus"></span>
+      <div id="slotGenList"></div>
+      <div id="slotGenPreview"></div>
+      <div id="slotPreviewBox"></div>
+      <div id="slotPreviewName"></div>
+      <div id="slotPreviewProvider"></div>
+      <div id="slotPreviewMsg"></div>
+      <button id="slotPickOneBtn"></button>
+      <button id="slotGenAllBtn"></button>
+      <button id="slotBulkApplyBtn"></button>
+      <input id="slotTagInput">
+      <textarea id="msMsgInput"></textarea>
+      <span id="msMsgCount"></span>
+    </div>
+
+  </section>
+
+
+  <!-- ══════════════════════════════════════════
+       AUTOMATION — Follow System
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-automation">
+    <style>
+      /* ── Automation page styles ── */
+      .auto-page-head {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 18px;
+      }
+      .auto-page-head h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+      .auto-page-head p  { font-size: 11px; color: var(--dim); margin-top: 2px; }
+
+      /* Module card */
+      .auto-module {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 14px;
+        background: var(--s1, var(--card));
+      }
+
+      /* Module header bar */
+      .auto-mod-hd {
+        display: flex; align-items: center; gap: 10px;
+        padding: 11px 16px; cursor: pointer;
+        border-bottom: 1px solid transparent;
+        transition: background .15s;
+        user-select: none;
+      }
+      .auto-mod-hd:hover { background: var(--s2); }
+      .auto-mod-hd.open  { border-bottom-color: var(--border); }
+
+      .auto-mod-icon {
+        width: 30px; height: 30px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px; flex-shrink: 0;
+      }
+      .auto-mod-icon.green  { background: rgba(61,255,160,.12); color: #3dffa0; }
+      .auto-mod-icon.purple { background: rgba(167,139,250,.12); color: #a78bfa; }
+
+      .auto-mod-info { flex: 1; min-width: 0; }
+      .auto-mod-title {
+        font-size: 13px; font-weight: 600; color: var(--text);
+        display: flex; align-items: center; gap: 8px;
+      }
+      .auto-mod-sub { font-size: 10px; color: var(--dim); margin-top: 1px; }
+
+      .auto-mod-badge {
+        font-size: 10px; font-weight: 600; padding: 2px 8px;
+        border-radius: 20px; border: 1px solid currentColor;
+        white-space: nowrap;
+      }
+      .auto-mod-badge.idle   { color: var(--dim); border-color: var(--border); }
+      .auto-mod-badge.run    { color: #3dffa0; border-color: rgba(61,255,160,.3); background: rgba(61,255,160,.07); }
+      .auto-mod-badge.purple { color: #a78bfa; border-color: rgba(167,139,250,.3); background: rgba(167,139,250,.07); }
+
+      .auto-mod-chevron {
+        font-size: 11px; color: var(--dim);
+        transition: transform .2s;
+      }
+      .auto-mod-chevron.open { transform: rotate(180deg); }
+
+      /* Module body */
+      .auto-mod-body { padding: 16px; display: none; }
+      .auto-mod-body.open { display: block; }
+
+      /* Config grid */
+      .auto-cfg-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .auto-cfg-field label {
+        font-size: 9px; font-weight: 600; letter-spacing: .08em;
+        color: var(--dim); display: block; margin-bottom: 4px;
+      }
+      .auto-cfg-field .inp {
+        width: 100%; height: 32px; font-size: 11px;
+      }
+      .auto-cfg-field.wide { grid-column: 1 / -1; }
+
+      /* Account pills row */
+      .auto-acc-row {
+        display: flex; gap: 6px; align-items: center;
+        padding: 10px 12px;
+        background: var(--s2); border-radius: 8px;
+        border: 1px solid var(--border);
+        margin-bottom: 12px; flex-wrap: wrap;
+      }
+      .auto-acc-lbl {
+        font-size: 9px; font-weight: 600; letter-spacing: .08em;
+        color: var(--dim); white-space: nowrap;
+      }
+      .auto-radio-pill {
+        display: flex; align-items: center; gap: 5px;
+        font-size: 11px; cursor: pointer; user-select: none;
+        padding: 3px 10px; border-radius: 20px;
+        border: 1px solid var(--border);
+        transition: border-color .15s, background .15s;
+      }
+      .auto-radio-pill input { display: none; }
+      .auto-radio-pill:has(input:checked) {
+        border-color: var(--ac,#3dffa0);
+        background: rgba(61,255,160,.07);
+        color: var(--ac,#3dffa0);
+      }
+      .auto-radio-pill.purple:has(input:checked) {
+        border-color: #a78bfa;
+        background: rgba(167,139,250,.07);
+        color: #a78bfa;
+      }
+
+      /* Action bar */
+      .auto-action-bar {
+        display: flex; gap: 8px; align-items: center;
+        margin-bottom: 14px; flex-wrap: wrap;
+      }
+      .auto-action-bar .spacer { flex: 1; }
+
+      /* Progress panel */
+      .auto-progress {
+        padding: 10px 14px;
+        background: var(--s2); border-radius: 8px;
+        border: 1px solid var(--border);
+        margin-bottom: 12px;
+      }
+      .auto-progress-top {
+        display: flex; justify-content: space-between;
+        align-items: center; margin-bottom: 8px;
+      }
+      .auto-progress-label {
+        font-size: 11px; font-weight: 600; color: var(--text);
+      }
+      .auto-progress-stats { display: flex; gap: 12px; font-size: 11px; }
+      .auto-stat { display: flex; align-items: center; gap: 4px; }
+      .auto-stat-val { font-weight: 700; }
+
+      .auto-progress-track {
+        height: 5px; background: var(--bg);
+        border-radius: 3px; overflow: hidden;
+      }
+      .auto-progress-fill {
+        height: 100%; width: 0%; border-radius: 3px;
+        transition: width .4s ease;
+      }
+
+      /* Log panel */
+      .auto-log {
+        background: var(--s2); border: 1px solid var(--border);
+        border-radius: 8px; height: 140px; max-height: 140px;
+        overflow-y: auto; font-family: monospace;
+        font-size: 10px; padding: 8px 10px; line-height: 1.9;
+      }
+
+      /* Dropzone */
+      .auto-dropzone {
+        border: 2px dashed var(--border);
+        border-radius: 10px; padding: 20px 14px;
+        text-align: center; cursor: pointer;
+        transition: border-color .2s, background .2s;
+        background: var(--s2);
+      }
+      .auto-dropzone:hover,
+      .auto-dropzone.drag  {
+        border-color: #a78bfa;
+        background: rgba(167,139,250,.05);
+      }
+
+      /* Thumb strip */
+      .auto-thumb-strip {
+        display: flex; flex-wrap: wrap; gap: 6px;
+        margin-top: 8px; min-height: 0;
+      }
+
+      /* Channel pill */
+      .auto-channel-pill {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 10px; padding: 2px 8px;
+        border-radius: 20px; background: rgba(61,255,160,.08);
+        border: 1px solid rgba(61,255,160,.25); color: #3dffa0;
+      }
+    </style>
+
+    <div class="auto-page-head">
+      <div>
+        <h1><i class="bi bi-robot" style="color:var(--ac);margin-right:6px"></i>Automation</h1>
+        <p>Follow bot &amp; bulk avatar changer</p>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════
+         MODULE 1 — Follow System
+    ═══════════════════════════════════ -->
+    <div class="auto-module" id="followBotCard">
+
+      <div class="auto-mod-hd open" id="followBotToggle">
+        <div class="auto-mod-icon green"><i class="bi bi-person-plus-fill"></i></div>
+        <div class="auto-mod-info">
+          <div class="auto-mod-title">
+            Follow System
+            <span id="fbChannelBanner" class="auto-channel-pill" style="display:none">
+              <i class="bi bi-hash"></i><span id="fbChannelSlug"></span>
+            </span>
+          </div>
+          <div class="auto-mod-sub">Automated follow / unfollow via Chrome CDP</div>
+        </div>
+        <span id="followBotBadge" class="auto-mod-badge idle">Idle</span>
+        <i class="bi bi-chevron-up auto-mod-chevron open"></i>
+      </div>
+
+      <div id="followBotBody" class="auto-mod-body open">
+
+        <!-- Account filter -->
+        <div class="auto-acc-row" style="margin-bottom:12px">
+          <span class="auto-acc-lbl">ACCOUNTS</span>
+          <label class="auto-radio-pill">
+            <input type="radio" name="fbAccMode" id="fbModeAll" value="all" checked>All
+          </label>
+          <label class="auto-radio-pill">
+            <input type="radio" name="fbAccMode" id="fbModeCount" value="count">
+            First&nbsp;<input id="fbCount" class="inp" type="number" value="10" min="1" max="9999"
+              style="height:22px;width:54px;font-size:11px;display:inline-block;margin:0 3px">&nbsp;accs
+          </label>
+          <label class="auto-radio-pill">
+            <input type="radio" name="fbAccMode" id="fbModeSelected" value="selected">
+            <span id="fbSelectedHint" style="color:inherit">0 selected</span>
+          </label>
+          <div style="margin-left:auto;display:flex;gap:5px">
+            <button class="btn ghost xs" id="fbSelectAllBtn" style="height:26px;font-size:10px"><i class="bi bi-check-all"></i></button>
+            <button class="btn ghost xs" id="fbClearSelBtn"  style="height:26px;font-size:10px"><i class="bi bi-x"></i></button>
+          </div>
+        </div>
+
+        <!-- Config grid -->
+        <div class="auto-cfg-grid">
+          <div class="auto-cfg-field">
+            <label>DELAY (ms)</label>
+            <input id="fbDelay" class="inp" type="number" value="6000" min="1000" max="60000">
+          </div>
+          <div class="auto-cfg-field">
+            <label>MODE</label>
+            <select id="fbMode" class="inp sel">
+              <option value="follow">Follow</option>
+              <option value="unfollow">Unfollow</option>
+            </select>
+          </div>
+          <div class="auto-cfg-field">
+            <label>BROWSER</label>
+            <div class="fb-browser-row">
+              <button type="button" class="fb-browser-btn active" data-browser="chrome" id="fbBrowserChrome">
+                <i class="bi bi-browser-chrome"></i> Chrome
+              </button>
+              <button type="button" class="fb-browser-btn" data-browser="firefox" id="fbBrowserFirefox">
+                <i class="bi bi-browser-firefox"></i> Firefox
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action bar -->
+        <div class="auto-action-bar">
+          <button class="btn ghost xs" id="fbClearLogBtn"><i class="bi bi-trash3"></i> Clear log</button>
+          <div class="spacer"></div>
+          <button class="btn primary" id="fbStartBtn" style="padding:0 22px">
+            <i class="bi bi-play-fill"></i> Start
+          </button>
+          <button class="btn danger" id="fbStopBtn" style="padding:0 22px;display:none">
+            <i class="bi bi-stop-fill"></i> Stop
+          </button>
+        </div>
+
+        <!-- Progress -->
+        <div class="auto-progress">
+          <div class="auto-progress-top">
+            <span class="auto-progress-label" id="fbProgressText">Ready</span>
+            <div class="auto-progress-stats">
+              <span class="auto-stat">
+                <span style="color:var(--ac)">✓</span>
+                <span class="auto-stat-val" id="fbOkCount" style="color:var(--ac)">0</span>
+              </span>
+              <span class="auto-stat">
+                <span style="color:var(--red)">✗</span>
+                <span class="auto-stat-val" id="fbFailCount" style="color:var(--red)">0</span>
+              </span>
+              <span class="auto-stat" style="color:var(--dim)" id="fbTotalLabel">0 accs</span>
+            </div>
+          </div>
+          <div class="auto-progress-track">
+            <div id="fbProgressBar" class="auto-progress-fill" style="background:var(--ac,#3dffa0)"></div>
+          </div>
+        </div>
+
+        <!-- Log -->
+        <div id="fbLog" class="auto-log"></div>
+
+      </div><!-- /followBotBody -->
+    </div><!-- /followBotCard -->
+
+
+    <!-- ═══════════════════════════════════
+         MODULE 1b — Stream Watcher
+         Uses saved account tokens to open viewer WebSockets against the
+         current channel so the accounts count as live viewers (watchtime).
+    ═══════════════════════════════════ -->
+    <div class="auto-module" id="streamWatcherCard">
+
+      <div class="auto-mod-hd open" id="swToggle">
+        <div class="auto-mod-icon" style="background:linear-gradient(135deg,#7ad7ff,#3dffa0);color:#0b1020"><i class="bi bi-eye-fill"></i></div>
+        <div class="auto-mod-info">
+          <div class="auto-mod-title">
+            Stream Watcher
+            <span id="swChannelBanner" class="auto-channel-pill" style="display:none">
+              <i class="bi bi-hash"></i><span id="swChannelSlug"></span>
+            </span>
+          </div>
+          <div class="auto-mod-sub">Watch the connected stream with saved accounts to accumulate watchtime</div>
+        </div>
+        <span id="swBadge" class="auto-mod-badge idle">Idle</span>
+        <i class="bi bi-chevron-up auto-mod-chevron open"></i>
+      </div>
+
+      <div id="swBody" class="auto-mod-body open">
+
+        <!-- Account filter -->
+        <div class="auto-acc-row" style="margin-bottom:12px">
+          <span class="auto-acc-lbl">ACCOUNTS</span>
+          <label class="auto-radio-pill">
+            <input type="radio" name="swAccMode" id="swModeAll" value="all" checked>All
+          </label>
+          <label class="auto-radio-pill">
+            <input type="radio" name="swAccMode" id="swModeCount" value="count">
+            First&nbsp;<input id="swCount" class="inp" type="number" value="50" min="1" max="9999"
+              style="height:22px;width:54px;font-size:11px;display:inline-block;margin:0 3px">&nbsp;accs
+          </label>
+          <label class="auto-radio-pill">
+            <input type="radio" name="swAccMode" id="swModeSelected" value="selected">
+            <span id="swSelectedHint" style="color:inherit">0 selected</span>
+          </label>
+        </div>
+
+        <!-- Config grid -->
+        <div class="auto-cfg-grid">
+          <div class="auto-cfg-field">
+            <label>CONNECT DELAY (ms)</label>
+            <input id="swDelay" class="inp" type="number" value="800" min="0" max="10000">
+          </div>
+          <div class="auto-cfg-field">
+            <label>STATUS</label>
+            <input id="swLiveCount" class="inp" type="text" value="0 / 0 connected" readonly>
+          </div>
+        </div>
+
+        <!-- Action bar -->
+        <div class="auto-action-bar">
+          <button class="btn ghost xs" id="swClearLogBtn"><i class="bi bi-trash3"></i> Clear log</button>
+          <div class="spacer"></div>
+          <button class="btn primary" id="swStartBtn" style="padding:0 22px">
+            <i class="bi bi-play-fill"></i> Start
+          </button>
+          <button class="btn danger" id="swStopBtn" style="padding:0 22px;display:none">
+            <i class="bi bi-stop-fill"></i> Stop All
+          </button>
+        </div>
+
+        <!-- Progress -->
+        <div class="auto-progress">
+          <div class="auto-progress-top">
+            <span class="auto-progress-label" id="swProgressText">Ready</span>
+            <div class="auto-progress-stats">
+              <span class="auto-stat">
+                <span style="color:var(--ac)">●</span>
+                <span class="auto-stat-val" id="swAliveCount" style="color:var(--ac)">0</span>
+              </span>
+              <span class="auto-stat">
+                <span style="color:var(--red)">✗</span>
+                <span class="auto-stat-val" id="swFailCount" style="color:var(--red)">0</span>
+              </span>
+              <span class="auto-stat" style="color:var(--dim)" id="swTotalLabel">0 accs</span>
+            </div>
+          </div>
+          <div class="auto-progress-track">
+            <div id="swProgressBar" class="auto-progress-fill" style="background:linear-gradient(90deg,#7ad7ff,#3dffa0)"></div>
+          </div>
+        </div>
+
+        <!-- Log -->
+        <div id="swLog" class="auto-log"></div>
+
+      </div><!-- /swBody -->
+    </div><!-- /streamWatcherCard -->
+
+
+    <!-- ═══════════════════════════════════
+         MODULE 2 — Avatar Upload
+    ═══════════════════════════════════ -->
+    <div class="auto-module" id="avCard">
+
+      <div class="auto-mod-hd open" id="avCardToggle">
+        <div class="auto-mod-icon purple"><i class="bi bi-person-bounding-box"></i></div>
+        <div class="auto-mod-info">
+          <div class="auto-mod-title">Avatar Upload</div>
+          <div class="auto-mod-sub">Bulk profile picture changer — S3 presigned upload</div>
+        </div>
+        <span id="avBadge" class="auto-mod-badge idle">Idle</span>
+        <i class="bi bi-chevron-up auto-mod-chevron open"></i>
+      </div>
+
+      <div id="avCardBody" class="auto-mod-body open">
+
+        <!-- Image pool -->
+        <div style="margin-bottom:14px">
+          <div style="font-size:9px;font-weight:600;letter-spacing:.08em;color:var(--dim);margin-bottom:8px">IMAGE POOL</div>
+
+          <div id="avDropzone" class="auto-dropzone">
+            <i class="bi bi-cloud-arrow-up" style="font-size:24px;color:#a78bfa;display:block;margin-bottom:6px"></i>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">Drop images here or click to browse</div>
+            <div style="font-size:10px;color:var(--dim);margin-top:3px">JPG · PNG · WEBP — multiple files supported</div>
+            <input type="file" id="avFileInput" accept="image/*" multiple style="display:none">
+          </div>
+
+          <div id="avThumbStrip" class="auto-thumb-strip"></div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+            <span id="avImgCount" style="font-size:10px;color:var(--dim)">No images loaded</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="avImgMode" class="inp sel" style="height:28px;font-size:10px;width:140px">
+                <option value="sequential">Sequential (1→1)</option>
+                <option value="random">Random pick</option>
+                <option value="pool" selected>Pool (cycle)</option>
+              </select>
+              <button class="btn ghost xs" id="avClearImgBtn"><i class="bi bi-x-lg"></i> Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Account filter -->
+        <div class="auto-acc-row" style="margin-bottom:14px">
+          <span class="auto-acc-lbl">ACCOUNTS</span>
+          <label class="auto-radio-pill purple">
+            <input type="radio" name="avAccMode" value="all" checked>All
+          </label>
+          <label class="auto-radio-pill purple">
+            <input type="radio" name="avAccMode" value="valid">Valid only
+          </label>
+          <label class="auto-radio-pill purple">
+            <input type="radio" name="avAccMode" value="selected">Selected
+          </label>
+        </div>
+
+        <!-- Config + actions -->
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+          <div class="auto-cfg-field" style="min-width:110px">
+            <label>DELAY (ms)</label>
+            <input id="avDelay" class="inp" type="number" value="3000" min="500" max="30000">
+          </div>
+          <div style="margin-left:auto;display:flex;gap:7px;align-items:flex-end">
+            <button class="btn ghost xs" id="avClearLogBtn" style="height:32px"><i class="bi bi-trash3"></i> Clear log</button>
+            <button class="btn primary" id="avStartBtn" style="height:32px;padding:0 22px;background:#a78bfa;border-color:#a78bfa">
+              <i class="bi bi-play-fill"></i> Start
+            </button>
+            <button class="btn danger" id="avStopBtn" style="height:32px;padding:0 22px;display:none">
+              <i class="bi bi-stop-fill"></i> Stop
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="auto-progress">
+          <div class="auto-progress-top">
+            <span class="auto-progress-label" id="avProgressText">Ready</span>
+            <div class="auto-progress-stats">
+              <span class="auto-stat">
+                <span style="color:var(--ac)">✓</span>
+                <span class="auto-stat-val" id="avOkCount" style="color:var(--ac)">0</span>
+              </span>
+              <span class="auto-stat">
+                <span style="color:var(--red)">✗</span>
+                <span class="auto-stat-val" id="avFailCount" style="color:var(--red)">0</span>
+              </span>
+              <span class="auto-stat">
+                <span style="color:var(--dim)">⊘</span>
+                <span class="auto-stat-val" id="avSkipCount" style="color:var(--dim)">0</span>
+              </span>
+              <span class="auto-stat" style="color:var(--dim)" id="avTotalLabel">0 accs</span>
+            </div>
+          </div>
+          <div class="auto-progress-track">
+            <div id="avProgressBar" class="auto-progress-fill" style="background:#a78bfa"></div>
+          </div>
+        </div>
+
+        <!-- Log -->
+        <div id="avLog" class="auto-log"></div>
+
+      </div><!-- /avCardBody -->
+    </div><!-- /avCard -->
+
+  </section>
+
+
+  <!-- ══════════════════════════════════════════
+       STREAMS
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-streams">
+    <div class="page-head">
+      <h1>Streams <span id="streamCountLabel" style="font-size:13px;font-weight:400;color:var(--dim)"></span></h1>
+      <p>Live Kick slots streams — filter by title keyword</p>
+    </div>
+    <div class="card" style="margin-bottom:14px;padding:10px 14px">
+      <div class="row-g" style="gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="badge" style="background:rgba(78,255,140,0.12);color:var(--ac);border:1px solid rgba(78,255,140,0.3);padding:4px 10px;border-radius:6px;font-size:11px;flex-shrink:0"><i class="bi bi-dice-5"></i> Slots</span>
+        <input id="streamKeyword" class="inp" placeholder="Search by keyword e.g. giveaway…" style="flex:1;min-width:140px">
+        <button class="btn primary" id="streamSearchBtn"><i class="bi bi-search"></i> Search</button>
+        <button class="btn ghost" id="streamRefreshBtn" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+    </div>
+    <div id="streamLoading" style="display:none">
+      <div class="stream-skeleton-grid">
+        <div class="stream-skel"></div><div class="stream-skel"></div>
+        <div class="stream-skel"></div><div class="stream-skel"></div>
+        <div class="stream-skel"></div><div class="stream-skel"></div>
+      </div>
+    </div>
+    <div id="streamEmpty" class="empty-state" style="display:none">
+      <i class="bi bi-display empty-state-icon"></i>
+      <div class="empty-state-title">No streams found</div>
+      <div class="empty-state-sub">Try a different keyword or refresh</div>
+    </div>
+    <div id="streamGrid" class="stream-grid"></div>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════
+       STREAM WATCHER
+  ══════════════════════════════════════════ -->
+
+
+
+  <!-- ══════════════════════════════════════════
+       SETTINGS
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-settings">
+    <div class="page-head">
+      <h1>Settings</h1>
+      <p>Configure FLT behaviour</p>
+    </div>
+
+    <div class="col2">
+      <div class="card">
+        <div class="card-label">Spammer</div>
+        <div class="field"><label class="lbl">Max Concurrent Requests</label><input id="setConcurrent" class="inp" type="number" value="5" min="1" max="30"></div>
+        <div class="field" style="margin-top:10px"><label class="lbl">Default Delay (ms)</label><input id="setDelay" class="inp" type="number" value="100" min="0"></div>
+        <div class="toggles" style="margin-top:12px">
+          <label class="tog"><input type="checkbox" id="setAutoRotate" checked><span class="tog-track"><span class="tog-knob"></span></span>Auto-rotate on ban</label>
+          <label class="tog"><input type="checkbox" id="setNotifs" checked><span class="tog-track"><span class="tog-knob"></span></span>Notifications</label>
+          <label class="tog"><input type="checkbox" id="setSound"><span class="tog-track"><span class="tog-knob"></span></span>Sound on ban</label>
+        </div>
+        <button class="btn primary" id="saveSettingsBtn" style="width:100%;margin-top:16px"><i class="bi bi-save"></i> Save Settings</button>
+      </div>
+      <div class="card" id="licenseInfoCard">
+        <div class="card-label">License</div>
+        <div id="licInfoLoading" style="font-size:10px;color:var(--dim);margin-top:6px">
+          <span class="lic-spinner"></span> Loading license info…
+        </div>
+        <div id="licInfoBody" style="display:none;margin-top:6px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 18px">
+            <div class="lic-field"><span class="lic-lbl">KEY</span><span class="lic-val" id="licKey">—</span></div>
+            <div class="lic-field"><span class="lic-lbl">STATUS</span><span class="lic-val" id="licStatus">—</span></div>
+            <div class="lic-field"><span class="lic-lbl">EXPIRES</span><span class="lic-val" id="licExpiry">—</span></div>
+            <div class="lic-field"><span class="lic-lbl">DAYS LEFT</span><span class="lic-val" id="licDays">—</span></div>
+            <div class="lic-field"><span class="lic-lbl">LAST CHECKED</span><span class="lic-val" id="licChecked">—</span></div>
+            <div class="lic-field"><span class="lic-lbl">PRODUCT</span><span class="lic-val" style="color:var(--ac2)">FLT v4</span></div>
+          </div>
+          <div id="licWarnBox" style="display:none;margin-top:10px;padding:7px 10px;background:rgba(255,58,110,0.07);border:1px solid rgba(255,58,110,0.22);border-radius:7px;font-size:10px;color:var(--red);letter-spacing:0.06em"></div>
+        </div>
+        <div id="licInfoError" style="display:none;font-size:10px;color:var(--red);margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Data</div>
+      <div class="row-g" style="flex-wrap:wrap;gap:8px">
+        <button class="btn ghost" id="exportBtn"><i class="bi bi-download"></i> Export Backup</button>
+        <button class="btn ghost" id="importBtn"><i class="bi bi-upload"></i> Import Backup</button>
+        <button class="btn danger" id="clearAllBtn"><i class="bi bi-trash"></i> Clear All Data</button>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════
+       DISCORD — DASHBOARD (placeholder, ready for expansion)
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-discord-dashboard">
+    <div class="dc-topbar">
+      <div class="dc-topbar-left">
+        <div class="dc-title-group">
+          <div class="dc-title-icon"><i class="bi bi-discord"></i></div>
+          <div>
+            <div class="dc-title">Discord</div>
+            <div class="dc-subtitle">Dashboard — Multi-account control</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dc-dash-body">
+      <div class="dc-dash-card">
+        <div class="dc-dash-stat">
+          <div class="dc-dash-stat-num" id="dcDashAccTotal">0</div>
+          <div class="dc-dash-stat-lbl">Accounts</div>
+        </div>
+        <div class="dc-dash-stat">
+          <div class="dc-dash-stat-num dc-green" id="dcDashAccValid">0</div>
+          <div class="dc-dash-stat-lbl">Valid</div>
+        </div>
+        <div class="dc-dash-stat">
+          <div class="dc-dash-stat-num dc-red" id="dcDashAccInvalid">0</div>
+          <div class="dc-dash-stat-lbl">Invalid</div>
+        </div>
+      </div>
+
+      <div class="dc-dash-empty">
+        <i class="bi bi-discord"></i>
+        <div class="dc-dash-empty-title">Discord Mode</div>
+        <div class="dc-dash-empty-sub">Add accounts in the Accounts tab to get started.<br>More tools coming soon.</div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════
+       DISCORD — ACCOUNTS
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-discord-accounts">
+
+    <!-- TOP COMMAND BAR -->
+    <div class="dc-topbar">
+      <div class="dc-topbar-left">
+        <div class="dc-title-group">
+          <div class="dc-title-icon"><i class="bi bi-people-fill"></i></div>
+          <div>
+            <div class="dc-title">Accounts</div>
+            <div class="dc-subtitle">Manage Discord accounts via user tokens</div>
+          </div>
+        </div>
+      </div>
+      <div class="dc-topbar-right">
+        <div class="dc-stat-bar">
+          <div class="dc-stat">
+            <span class="dc-stat-num" id="dcQsTotal">0</span>
+            <span class="dc-stat-lbl">Total</span>
+          </div>
+          <div class="dc-stat-sep"></div>
+          <div class="dc-stat dc-stat-green">
+            <span class="dc-stat-num" id="dcQsValid">0</span>
+            <span class="dc-stat-lbl">Valid</span>
+          </div>
+          <div class="dc-stat-sep"></div>
+          <div class="dc-stat dc-stat-yellow">
+            <span class="dc-stat-num" id="dcQsLocked">0</span>
+            <span class="dc-stat-lbl">Locked</span>
+          </div>
+          <div class="dc-stat-sep"></div>
+          <div class="dc-stat dc-stat-red">
+            <span class="dc-stat-num" id="dcQsInvalid">0</span>
+            <span class="dc-stat-lbl">Invalid</span>
+          </div>
+        </div>
+        <div class="dc-actions">
+          <button class="btn ghost dc-export-btn" id="dcExportBtn" type="button" title="Copy all tokens to clipboard">
+            <i class="bi bi-box-arrow-up"></i> Export
+          </button>
+          <button class="btn ghost dc-verify-all-btn" id="dcVerifyAllBtn" type="button">
+            <i class="bi bi-shield-check"></i> Verify All
+          </button>
+          <button class="btn primary dc-add-btn" id="dcAddAccBtn" type="button">
+            <i class="bi bi-plus-lg"></i> Add
+          </button>
+          <button class="btn ghost dc-batch-btn" id="dcBatchAccBtn" type="button">
+            <i class="bi bi-upload"></i> Batch
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTROL STRIP -->
+    <div class="dc-control-strip">
+      <div class="dc-filter-tabs">
+        <button class="dc-fil active" data-f="all"     type="button">All <b id="dcFAll">0</b></button>
+        <button class="dc-fil"        data-f="valid"   type="button">Valid <b id="dcFValid">0</b></button>
+        <button class="dc-fil"        data-f="locked"  type="button">Locked <b id="dcFLocked">0</b></button>
+        <button class="dc-fil"        data-f="invalid" type="button">Invalid <b id="dcFInvalid">0</b></button>
+      </div>
+
+      <div class="dc-sel-actions">
+        <button class="btn ghost xs" id="dcVerifySelBtn" type="button" style="display:none">
+          <i class="bi bi-shield-check"></i> Verify
+        </button>
+        <button class="btn ghost xs" id="dcExportSelBtn" type="button" style="display:none">
+          <i class="bi bi-clipboard"></i> Copy Tokens
+        </button>
+        <button class="btn danger xs" id="dcDelSelBtn" type="button" style="display:none">
+          <i class="bi bi-trash"></i> Delete
+        </button>
+        <span id="dcAccSelCount" class="dc-sel-badge" style="display:none"></span>
+      </div>
+
+      <input id="dcSearch" class="inp dc-search" type="text"
+             placeholder="&#128269; Search accounts..."
+             autocomplete="off">
+    </div>
+
+    <!-- VERIFY-ALL PROGRESS BAR -->
+    <div id="dcVerifyProgress" class="dc-verify-progress" style="display:none">
+      <div class="dc-vp-bar"><div class="dc-vp-fill" id="dcVpFill"></div></div>
+      <span class="dc-vp-text" id="dcVpText">Verifying…</span>
+      <button class="btn ghost xs" id="dcVpStopBtn" type="button"><i class="bi bi-stop-fill"></i> Stop</button>
+    </div>
+
+    <!-- TABLE -->
+    <div class="dc-table-wrap">
+      <table class="dc-tbl">
+        <thead>
+          <tr>
+            <th class="dc-th-chk"><input type="checkbox" id="dcChkAll" class="chk" title="Check/uncheck all"></th>
+            <th class="dc-th-sort" data-sort="name">Account <span class="dc-sort-ic" id="dcSortName"></span></th>
+            <th>Token</th>
+            <th class="dc-th-sort" data-sort="status">Status <span class="dc-sort-ic" id="dcSortStatus"></span></th>
+            <th class="dc-th-sort" data-sort="added">Added <span class="dc-sort-ic" id="dcSortAdded">↓</span></th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="dcAccBody"></tbody>
+      </table>
+      <div id="dcAccEmpty" class="dc-empty" style="display:none">
+        <i class="bi bi-discord dc-empty-icon"></i>
+        <div class="dc-empty-title">No Discord accounts yet</div>
+        <div class="dc-empty-sub">Click <b>Add Account</b> and paste a Discord user token</div>
+      </div>
+    </div>
+
+  </section>
+
+
+  <!-- ══════════════════════════════════════════
+       KIK — Accounts
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-kik-accounts">
+    <div class="kik-topbar">
+      <div class="kik-topbar-left">
+        <div class="kik-title-group">
+          <div class="kik-title-icon"><i class="bi bi-people-fill"></i></div>
+          <div>
+            <div class="kik-title">Kik Accounts</div>
+            <div class="kik-subtitle">Saved Kik accounts — created silently, no browser window</div>
+          </div>
+        </div>
+      </div>
+      <div class="kik-topbar-right">
+        <div class="kik-stat-bar">
+          <div class="kik-stat">
+            <span class="kik-stat-num" id="kikQsTotal">0</span>
+            <span class="kik-stat-lbl">Total</span>
+          </div>
+        </div>
+        <div class="kik-actions">
+          <button class="btn ghost" id="kikExportBtn" type="button" title="Copy accounts to clipboard">
+            <i class="bi bi-box-arrow-up"></i> Export
+          </button>
+          <button class="btn danger xs" id="kikDeleteAllBtn" type="button">
+            <i class="bi bi-trash"></i> Delete All
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kik-control-strip">
+      <input id="kikSearch" class="inp kik-search" type="text"
+             placeholder="&#128269; Search accounts..." autocomplete="off">
+    </div>
+
+    <div class="kik-table-wrap">
+      <table class="kik-tbl">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Password</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="kikAccBody"></tbody>
+      </table>
+      <div id="kikAccEmpty" class="kik-empty" style="display:none">
+        <i class="bi bi-people kik-empty-icon"></i>
+        <div class="kik-empty-title">No accounts yet</div>
+        <div class="kik-empty-sub">Use <b>Create Account</b> to generate Kik accounts</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       KIK — Create Account
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-kik-create">
+    <div class="kik-topbar">
+      <div class="kik-topbar-left">
+        <div class="kik-title-group">
+          <div class="kik-title-icon"><i class="bi bi-person-plus-fill"></i></div>
+          <div>
+            <div class="kik-title">Create Kik Account</div>
+            <div class="kik-subtitle">Runs entirely inside the app — no browser window opens</div>
+          </div>
+        </div>
+      </div>
+      <div class="kik-topbar-right">
+        <div class="kik-stat-bar">
+          <div class="kik-stat kik-stat-green">
+            <span class="kik-stat-num" id="kikCreatedTotal">0</span>
+            <span class="kik-stat-lbl">Created</span>
+          </div>
+          <div class="kik-stat-sep"></div>
+          <div class="kik-stat kik-stat-red">
+            <span class="kik-stat-num" id="kikFailedTotal">0</span>
+            <span class="kik-stat-lbl">Failed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="kik-create-body">
+
+      <!-- Config panel -->
+      <div class="kik-cfg-card">
+        <div class="kik-cfg-title"><i class="bi bi-gear-fill"></i> Configuration</div>
+
+        <div class="kik-cfg-row">
+          <label class="kik-cfg-label">Manual proxy override</label>
+          <input id="kikProxy" class="inp kik-inp" type="text"
+                 placeholder="Leave blank to use built-in proxy pool"
+                 autocomplete="off">
+          <span class="kik-cfg-hint">Leave blank to rotate through built-in pool (check Proxies tab first)</span>
+        </div>
+
+        <div class="kik-cfg-row">
+          <label class="kik-cfg-label">Quantity</label>
+          <input id="kikQty" class="inp kik-inp kik-inp-sm" type="number" value="1" min="1" max="50">
+          <span class="kik-cfg-hint">Accounts per batch</span>
+        </div>
+
+        <div class="kik-cfg-row">
+          <label class="kik-cfg-label">Delay between accounts (s)</label>
+          <input id="kikDelay" class="inp kik-inp kik-inp-sm" type="number" value="3" min="1" max="60">
+        </div>
+
+        <div class="kik-cfg-actions">
+          <button class="btn primary kik-create-btn" id="kikCreateBtn" type="button">
+            <i class="bi bi-person-plus-fill"></i> Create Account
+          </button>
+          <button class="btn danger" id="kikStopBtn" type="button" style="display:none">
+            <i class="bi bi-stop-fill"></i> Stop
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress + log -->
+      <div class="kik-log-card">
+        <div class="kik-log-header">
+          <span class="kik-cfg-title"><i class="bi bi-terminal"></i> Navigator Log</span>
+          <button class="btn ghost xs" id="kikClearLogBtn" type="button">Clear</button>
+        </div>
+        <div class="kik-navigator-badge">
+          <i class="bi bi-incognito"></i> Hidden navigator active — all requests routed via main process
+        </div>
+        <div id="kikProgressWrap" style="display:none">
+          <div class="kik-prog-bar"><div class="kik-prog-fill" id="kikProgFill"></div></div>
+          <span class="kik-prog-text" id="kikProgText">0 / 0</span>
+        </div>
+        <div id="kikLog" class="kik-log"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       KIK — Proxy Checker
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-kik-proxies">
+    <div class="kik-topbar">
+      <div class="kik-topbar-left">
+        <div class="kik-title-group">
+          <div class="kik-title-icon"><i class="bi bi-shield-check"></i></div>
+          <div>
+            <div class="kik-title">Proxy Checker</div>
+            <div class="kik-subtitle">Test proxies before use — only working ones are used for creation</div>
+          </div>
+        </div>
+      </div>
+      <div class="kik-topbar-right">
+        <div class="kik-actions">
+          <button class="btn ghost xs" id="kikLoadBuiltinBtn" type="button">
+            <i class="bi bi-arrow-down-circle"></i> Load Built-in
+          </button>
+          <button class="btn primary" id="kikCheckBtn" type="button">
+            <i class="bi bi-play-fill"></i> Check Proxies
+          </button>
+          <button class="btn danger" id="kikCheckStopBtn" type="button" style="display:none">
+            <i class="bi bi-stop-fill"></i> Stop
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kik-proxy-body">
+      <div class="kik-cfg-card" style="min-height:0">
+        <div class="kik-cfg-title"><i class="bi bi-list-ul"></i> Proxy List</div>
+        <div class="kik-cfg-hint" style="margin-bottom:6px">
+          Format: <code>host:port:username:password</code> or <code>http://user:pass@host:port</code> — one per line.
+          Built-in proxies are pre-loaded below.
+        </div>
+        <textarea id="kikProxyList" class="inp kik-proxy-textarea"
+          placeholder="host:port:username:password&#10;http://user:pass@host:port"></textarea>
+        <div id="kikProxyLog" class="kik-log kik-proxy-log"></div>
+      </div>
+
+      <div class="kik-cfg-card" style="min-height:0">
+        <div class="kik-cfg-title"><i class="bi bi-check2-circle"></i> Results</div>
+        <div class="kik-cfg-hint" style="margin-bottom:6px">
+          Working proxies are automatically used for account creation (rotating pool).
+        </div>
+        <div id="kikProxyResults" class="kik-proxy-results"></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════
+       CREATE ACCOUNT (in-app BrowserView)
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-create-account">
+    <div class="kca-topbar">
+      <div class="kca-topbar-left">
+        <div class="kca-topbar-title"><i class="bi bi-person-plus-fill"></i> Create Account</div>
+        <div class="kca-topbar-sub">In-app registration — no browser window opens</div>
+      </div>
+      <div class="kca-stats-bar">
+        <div class="kca-stat kca-stat-green"><span id="kcaStatCreated">0</span><span class="kca-stat-lbl">Created</span></div>
+        <div class="kca-stat kca-stat-red"><span id="kcaStatFailed">0</span><span class="kca-stat-lbl">Failed</span></div>
+        <div class="kca-stat kca-stat-blue"><span id="kcaStatRunning">0</span><span class="kca-stat-lbl">Running</span></div>
+      </div>
+    </div>
+
+    <div class="kca-body">
+
+      <!-- LEFT — Configuration -->
+      <div class="kca-card kca-card-config">
+        <div class="kca-card-title"><i class="bi bi-sliders"></i> Configuration</div>
+
+        <div class="kca-field">
+          <label class="lbl">Quantity</label>
+          <input id="kcaCount" class="inp" type="number" min="1" max="50" value="1">
+          <span class="kca-hint">1–50 accounts per run</span>
+        </div>
+
+        <div class="kca-field">
+          <label class="lbl">Delay between accounts (sec)</label>
+          <input id="kcaDelay" class="inp" type="number" min="0" max="600" value="5">
+        </div>
+
+        <div class="kca-field">
+          <label class="lbl">Proxy <span class="kca-hint">(optional)</span></label>
+          <input id="kcaProxy" class="inp" type="text" placeholder="http://user:pass@host:port  or  host:port:user:pass">
+          <div class="kca-proxy-row">
+            <button class="btn ghost xs" id="kcaTestProxyBtn"><i class="bi bi-wifi"></i> Test Proxy</button>
+            <span id="kcaProxyStatus" class="kca-proxy-status"></span>
+          </div>
+        </div>
+
+        <div class="kca-field">
+          <label class="tog">
+            <input type="checkbox" id="kcaAutoAdd" checked>
+            <span class="tog-track"><span class="tog-knob"></span></span>
+            Auto-add to Accounts list
+          </label>
+        </div>
+
+        <div class="kca-btn-row">
+          <button class="btn primary" id="kcaStartBtn"><i class="bi bi-play-fill"></i> Start</button>
+          <button class="btn danger"  id="kcaStopBtn"  style="display:none"><i class="bi bi-stop-fill"></i> Stop</button>
+        </div>
+      </div>
+
+      <!-- RIGHT — Live Navigator Log -->
+      <div class="kca-card kca-card-log">
+        <div class="kca-card-title"><i class="bi bi-terminal"></i> Live Navigator Log</div>
+
+        <div class="kik-navigator-badge" style="margin-bottom:10px">
+          <i class="bi bi-eye-slash-fill"></i>
+          Hidden navigator active — all HTTP via in-app BrowserView
+        </div>
+
+        <div class="kca-prog-wrap">
+          <div class="kca-prog-track"><div id="kcaProgFill" class="kca-prog-fill"></div></div>
+          <span id="kcaProgText" class="kca-prog-text">Idle</span>
+        </div>
+
+        <div id="kcaLog" class="kca-log"></div>
+
+        <button class="btn ghost xs" id="kcaClearLog" style="margin-top:6px"><i class="bi bi-trash"></i> Clear Log</button>
+      </div>
+
+    </div><!-- /.kca-body -->
+
+    <!-- Created Accounts Table -->
+    <div class="kca-created-section">
+      <div class="kca-created-head">
+        <span class="kca-created-title"><i class="bi bi-collection-fill"></i> Created Accounts</span>
+        <button class="btn ghost xs" id="kcaExportBtn"><i class="bi bi-download"></i> Export</button>
+      </div>
+      <div id="kcaCreatedEmpty" class="kca-created-empty">No accounts created yet — press Start to begin.</div>
+      <div class="kca-tbl-wrap">
+        <table class="kca-tbl">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Email</th>
+              <th>Username</th>
+              <th>Password</th>
+              <th>Birthday</th>
+              <th>Token</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="kcaCreatedBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+
+<!-- ══════════════════════════════════════════
+     MODALS
+══════════════════════════════════════════ -->
+
+<!-- Add Token -->
+<div class="overlay" id="modalAddToken">
+  <div class="modal">
+    <div class="modal-head"><h3>Add Token</h3><button class="modal-x" data-close="modalAddToken">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label class="lbl">Bearer Token</label>
+        <input id="tokModalInput" class="inp" type="password" placeholder="Paste token — auto-fetches account info">
+      </div>
+      <div id="tokPreview" class="preview" style="display:none">
+        <img id="tpAvatar" class="preview-av" src="" alt="" onerror="this.style.display='none'">
+        <div><div id="tpName" class="preview-name"></div><div id="tpEmail" class="preview-sub"></div></div>
+      </div>
+      <div id="tokStatus" class="fetch-st"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close="modalAddToken">Cancel</button>
+      <button class="btn primary" id="saveTokBtn"><i class="bi bi-check-lg"></i> Save Token</button>
+    </div>
+  </div>
+</div>
+
+<!-- Batch Import -->
+<div class="overlay" id="modalBatch">
+  <div class="modal">
+    <div class="modal-head"><h3>Batch Import</h3><button class="modal-x" data-close="modalBatch">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label class="lbl">Upload .txt</label><input id="batchFile" type="file" accept=".txt" class="inp"></div>
+      <div class="field" style="margin-top:8px"><label class="lbl">Or paste (one per line)</label>
+        <textarea id="batchText" class="inp textarea" rows="7" placeholder="token1&#10;token2"></textarea>
+      </div>
+      <div id="batchStatus" class="fetch-st"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close="modalBatch">Cancel</button>
+      <button class="btn primary" id="doBatchBtn"><i class="bi bi-upload"></i> Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Follow Status results (Dispatcher → Check Follow Status) -->
+<div class="overlay" id="modalFollowStatus">
+  <div class="modal" style="width:680px;max-width:92vw">
+    <div class="modal-head">
+      <h3>Follow Status — <span id="fsChannelName" style="color:var(--ac,#3dffa0)">@channel</span></h3>
+      <button class="modal-x" data-close="modalFollowStatus">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fs-stats">
+        <div class="fs-stat green"><span class="fs-num" id="fsFollowing">0</span><span class="fs-lbl">Following</span></div>
+        <div class="fs-stat red"><span class="fs-num" id="fsNotFollowing">0</span><span class="fs-lbl">Not following</span></div>
+        <div class="fs-stat yel"><span class="fs-num" id="fsErrors">0</span><span class="fs-lbl">Errored</span></div>
+        <div class="fs-stat dim"><span class="fs-num" id="fsTotal">0</span><span class="fs-lbl">Total</span></div>
+      </div>
+      <div class="fs-filter-row">
+        <label class="fs-filter-pill"><input type="radio" name="fsFilter" value="all" checked>All</label>
+        <label class="fs-filter-pill"><input type="radio" name="fsFilter" value="not">Not following</label>
+        <label class="fs-filter-pill"><input type="radio" name="fsFilter" value="yes">Following</label>
+        <label class="fs-filter-pill"><input type="radio" name="fsFilter" value="err">Errored</label>
+        <div style="flex:1"></div>
+        <button class="btn ghost xs" id="fsSelectNotBtn" title="Tick all not-following in the Accounts table so you can mass-follow them">
+          <i class="bi bi-check2-square"></i> Select all not-following
+        </button>
+      </div>
+      <div id="fsRows" class="fs-rows"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close="modalFollowStatus">Close</button>
+      <button class="btn primary" id="fsRunFollowBtn">
+        <i class="bi bi-person-plus-fill"></i> Send not-following to Follow Bot
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit Account -->
+<div class="overlay" id="modalAddAcc">
+  <div class="modal">
+    <div class="modal-head"><h3 id="accModalTitle">Add Account</h3><button class="modal-x" data-close="modalAddAcc">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label class="lbl">Bearer Token</label>
+        <div class="row-g">
+          <input id="accTokInput" class="inp" type="password" placeholder="Paste bearer token">
+          <button class="btn ghost xs" id="accFetchBtn"><i class="bi bi-arrow-clockwise"></i> Fetch</button>
+        </div>
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label class="lbl">Chrome Profile <span style="font-weight:400;color:var(--dim)">(for Follow Bot — e.g. Profile 297)</span></label>
+        <input id="accChromeProfile" class="inp" type="text" placeholder="Profile 297" style="max-width:200px">
+      </div>
+      <div id="accPreview" class="preview" style="display:none">
+        <img id="apAvatar" class="preview-av" src="" alt="" onerror="this.style.display='none'">
+        <div><div id="apName" class="preview-name"></div><div id="apEmail" class="preview-sub"></div><div id="apUid" class="preview-sub"></div></div>
+      </div>
+      <div id="accFetchStatus" class="fetch-st"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close="modalAddAcc">Cancel</button>
+      <button class="btn primary" id="saveAccBtn"><i class="bi bi-check-lg"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Send / AutoSend Modal -->
+<div class="overlay" id="modalSend">
+  <div class="modal wide">
+    <div class="modal-head">
+      <h3 id="sendTitle">Send Message</h3>
+      <button class="modal-x" id="sendCloseBtn">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+        <label class="lbl">Target Channel</label>
+        <div class="row-g">
+          <input id="sendChannelInput" class="inp" type="text" placeholder="username or kick.com/username" style="flex:1">
+          <button class="btn ghost xs" id="sendConnectBtn"><i class="bi bi-plug"></i> CONNECT</button>
+        </div>
+        <div id="sendChannelStatus"></div>
+      </div>
+      <label class="tog" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+        <input type="checkbox" id="autoSendChk"><span class="tog-track"><span class="tog-knob"></span></span>
+        <span id="autoSendLbl">AutoSend: OFF</span>
+      </label>
+      <div class="field">
+        <label class="lbl">Message</label>
+        <div class="rel">
+          <textarea id="sendMsgInput" class="inp textarea" rows="3" maxlength="150" placeholder="Type message…"></textarea>
+          <span id="sendChr" class="abs-hint">0/150</span>
+        </div>
+        <div style="margin-top:6px">
+          <button class="btn ghost xs" id="sendSlotBtn" style="font-size:10px"><i class="bi bi-dice-5"></i> Auto Generate Slot</button>
+        </div>
+      </div>
+      <div class="field" style="margin-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label class="lbl">Presets</label>
+          <div style="display:flex;gap:5px">
+            <input id="presetName" class="inp" style="height:28px;width:130px;font-size:10px" placeholder="Preset name…">
+            <button class="btn ghost xs" id="savePresetBtn"><i class="bi bi-bookmark-plus"></i></button>
+            <button class="btn ghost xs" id="importPresetsBtn"><i class="bi bi-upload"></i></button>
+            <button class="btn ghost xs" id="clearPresetsBtn"><i class="bi bi-trash"></i></button>
+          </div>
+        </div>
+        <div id="presetList"></div>
+        <div id="importPresetsPanel" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:var(--rs);padding:12px;margin-top:8px">
+          <span class="lbl" style="display:block;margin-bottom:6px">Paste presets (1 per line) <span id="importPresetCount" style="color:var(--dim);font-weight:400">0 lines</span></span>
+          <textarea id="importPresetsText" class="inp textarea" rows="4" placeholder="message 1&#10;message 2"></textarea>
+          <div class="row-g" style="margin-top:8px;justify-content:flex-end">
+            <button class="btn ghost xs" id="cancelImportBtn">Cancel</button>
+            <button class="btn primary xs" id="doImportPresetsBtn"><i class="bi bi-check-lg"></i> Import</button>
+          </div>
+        </div>
+      </div>
+      <div id="autoSendPanel" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
+          <div class="field">
+            <label class="lbl">Min Interval (s)</label>
+            <input id="sendRandMin" class="inp" type="number" value="10" min="1" max="3600">
+          </div>
+          <div class="field">
+            <label class="lbl">Max Interval (s)</label>
+            <input id="sendRandMax" class="inp" type="number" value="25" min="1" max="3600">
+          </div>
+          <div class="field">
+            <label class="lbl">Interval (sec)</label>
+            <input id="sendInterval" class="inp" type="number" value="13" min="1" style="display:none">
+            <span id="sendIntervalDisplay" style="font-size:10px;color:var(--dim);margin-top:6px;display:block">Uses min–max range above</span>
+          </div>
+          <div class="field"><label class="lbl">Max Count (0=∞)</label><input id="sendMaxCount" class="inp" type="number" value="0" min="0"></div>
+        </div>
+        <div style="margin-top:10px">
+          <label class="lbl">Active Jobs</label>
+          <div id="jobsList" class="jobs-list" style="margin-top:6px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger xs" id="stopThisBtn"><i class="bi bi-stop-fill"></i> Stop This</button>
+      <button class="btn danger xs" id="stopAllBtn"><i class="bi bi-stop-circle"></i> Stop All</button>
+      <button class="btn ghost" id="sendCloseBtn2">Close</button>
+      <button class="btn primary" id="sendMainBtn"><i class="bi bi-send"></i> Send</button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+
+<!-- ELECTRON CONTROLS -->
+<script>
+(function() {
+  if (!window.electronAPI) return;
+  const api = window.electronAPI;
+  let alwaysOnTop = true;
+
+  document.getElementById('tb-min').onclick   = () => api.minimize();
+  document.getElementById('tb-max').onclick   = () => api.maximize();
+  document.getElementById('tb-close').onclick = () => api.close();
+
+  const topBtn = document.getElementById('topToggleBtn');
+  topBtn.onclick = () => {
+    alwaysOnTop = !alwaysOnTop;
+    api.setAlwaysOnTop(alwaysOnTop);
+    topBtn.classList.toggle('off', !alwaysOnTop);
+  };
+
+  const opSlider = document.getElementById('opacitySlider');
+  function applyOpacity() {
+    const pct = parseInt(opSlider.value, 10);
+    const fillPct = ((pct - 20) / (100 - 20)) * 100;
+    opSlider.style.background = `linear-gradient(90deg, #3dffa0 ${fillPct}%, #20203a ${fillPct}%)`;
+    api.setOpacity(pct / 100);
+  }
+  opSlider.addEventListener('input', applyOpacity);
+  opSlider.addEventListener('change', applyOpacity);
+  applyOpacity();
+
+  const loginBtn = document.getElementById('kickLoginBtn');
+  if (loginBtn) loginBtn.onclick = () => {
+    loginBtn.innerHTML = '<span class="btn-icon"><i class="bi bi-hourglass-split"></i></span><span class="btn-label">OPENING…</span>';
+    loginBtn.classList.add('loading');
+    api.openKickLogin({});
+  };
+
+  api.onLoginResult((data) => {
+    loginBtn.innerHTML = '<span class="btn-icon"><i class="bi bi-plug-fill"></i></span><span class="btn-label">CONNECT</span><span class="btn-dot"></span>';
+    loginBtn.classList.remove('loading');
+    if (data.error) { if (typeof notify === 'function') notify('Login failed: ' + data.error, 'error'); return; }
+    let token = data.bearerToken;
+    if (!token && data.authCookie) token = data.authCookie.value;
+    if (!token && data.cookies?.length) token = (data.cookies.find(c=>c.name==='XSRF-TOKEN')||data.cookies[0])?.value;
+    if (token && typeof quickAddTokenDirect === 'function') quickAddTokenDirect(token);
+    else if (typeof notify === 'function') notify('Logged in but no token found', 'warning');
+  });
+
+  if (api.onTokenLoginResult) {
+    api.onTokenLoginResult((data) => {
+      if (data.ok) { if (typeof notify === 'function') notify('Kick window opened!', 'success'); }
+      else { if (typeof notify === 'function') notify('Could not open Kick: ' + (data.error||'unknown'), 'error'); }
+    });
+  }
+})();
+</script>
+
+<!-- PROTECTION + INTERACTIONS -->
+<script>
+!function(){
+  'use strict';
+  document.addEventListener('contextmenu',function(e){e.preventDefault();},true);
+  document.addEventListener('keydown',function(e){
+    var k=e.key&&e.key.toUpperCase();
+    if(e.key==='F12'||(e.ctrlKey&&e.shiftKey&&(k==='I'||k==='J'||k==='C'))||(e.ctrlKey&&k==='U')||(e.metaKey&&e.altKey&&k==='I')){
+      e.preventDefault();e.stopImmediatePropagation();return false;
+    }
+  },true);
+  document.addEventListener('selectstart',function(e){
+    if(!e.target.matches('input,textarea,select'))e.preventDefault();
+  });
+  window.addEventListener('resize',function(){
+    if(window.outerWidth-window.innerWidth>200||window.outerHeight-window.innerHeight>200){
+      document.body.style.filter='blur(10px) brightness(0.3)';
+      setTimeout(function(){document.body.style.filter='';},1500);
+    }
+  });
+  document.addEventListener('click',function(e){
+    var t=e.target.closest('.btn,.nav-btn,.fil,.kick-login-btn');
+    if(!t||t.disabled)return;
+    var r=document.createElement('span');
+    r.className='ripple';
+    var rect=t.getBoundingClientRect();
+    var s=Math.max(rect.width,rect.height)*2.2;
+    r.style.cssText='position:absolute;border-radius:50%;pointer-events:none;background:rgba(255,255,255,0.12);width:'+s+'px;height:'+s+'px;left:'+(e.clientX-rect.left-s/2)+'px;top:'+(e.clientY-rect.top-s/2)+'px;transform:scale(0);animation:rippleAnim 0.55s cubic-bezier(.4,0,.2,1) forwards;';
+    t.style.position=t.style.position||'relative';
+    t.style.overflow='hidden';
+    t.appendChild(r);
+    setTimeout(function(){r.remove();},600);
+  });
+  window.__fltStaggerInit = function(){ /* no-op */ };
+}();
+</script>
+
+<style>@keyframes rippleAnim{to{transform:scale(1);opacity:0;}}</style>
+
+<!-- LICENSE INFO PANEL -->
+<script>
+(function () {
+  'use strict';
+  function fmt(isoStr) {
+    if (!isoStr) return '—';
+    try { return new Date(isoStr).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }); }
+    catch { return isoStr; }
+  }
+  function setLicField(id, text, cls) {
+    const el = document.getElementById(id); if (!el) return;
+    el.textContent = text || '—';
+    if (cls) { el.className = 'lic-val ' + cls; }
+  }
+  async function loadLicenseInfo() {
+    const loading = document.getElementById('licInfoLoading');
+    const body    = document.getElementById('licInfoBody');
+    const errBox  = document.getElementById('licInfoError');
+    const warnBox = document.getElementById('licWarnBox');
+    if (!loading) return;
+    loading.style.display = '';
+    if (body)   body.style.display   = 'none';
+    if (errBox) errBox.style.display = 'none';
+    try {
+      const info = await window.electronAPI?.licenseGetInfo?.();
+      loading.style.display = 'none';
+      if (!info) {
+        if (errBox) { errBox.textContent = 'No license info available.'; errBox.style.display = ''; }
+        return;
+      }
+      setLicField('licKey',     info.maskedKey || '****');
+      setLicField('licStatus',  (info.status || 'active').toUpperCase(), info.status === 'active' ? 'ok' : 'bad');
+      setLicField('licExpiry',  info.expiryFormatted || 'Never');
+      setLicField('licChecked', info.validatedAt ? fmt(info.validatedAt) : '—');
+      const days = info.daysLeft;
+      if (days === null || days === undefined) {
+        setLicField('licDays', '∞', 'ok');
+      } else {
+        setLicField('licDays', days + ' days', days > 14 ? 'ok' : days > 3 ? 'warn' : 'bad');
+        if (warnBox) {
+          if (days <= 7) {
+            warnBox.innerHTML = `<i class="bi bi-exclamation-triangle-fill" style="margin-right:5px;color:var(--yel)"></i>Your license expires in ${days} day${days === 1 ? '' : 's'}. Please renew soon.`;
+            warnBox.style.display = '';
+          } else { warnBox.style.display = 'none'; }
+        }
+      }
+      if (body) body.style.display = '';
+    } catch (e) {
+      if (loading) loading.style.display = 'none';
+      if (errBox) { errBox.textContent = 'Could not load license info.'; errBox.style.display = ''; }
+    }
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => { if (btn.dataset.tab === 'settings') loadLicenseInfo(); });
+    });
+    setInterval(loadLicenseInfo, 30 * 60 * 1000);
+  });
+})();
+</script>
+
+
+<!-- ══════════════════════════════════════════
+     DISCORD MODALS
+══════════════════════════════════════════ -->
+
+<!-- Add / Edit Discord Account -->
+<div class="overlay" id="modalDcAdd">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="dcModalTitle">Add Discord Account</h3>
+      <button class="modal-x" data-close="modalDcAdd" type="button">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label class="lbl">Discord Token</label>
+        <div class="row-g">
+          <input id="dcTokInput" class="inp" type="password" placeholder="Paste Discord user token" autocomplete="off">
+          <button class="btn ghost xs" id="dcFetchBtn" type="button"><i class="bi bi-arrow-clockwise"></i> Fetch</button>
+        </div>
+      </div>
+      <div id="dcAccPreview" class="dc-preview" style="display:none;margin-top:10px">
+        <img id="dcAvPreview" class="dc-preview-av" src="" alt="" onerror="this.style.display='none'">
+        <div>
+          <div id="dcNamePreview" class="dc-preview-name"></div>
+          <div id="dcTagPreview"  class="dc-preview-sub"></div>
+          <div id="dcIdPreview"   class="dc-preview-sub"></div>
+        </div>
+      </div>
+      <div id="dcFetchStatus" class="fetch-st" style="margin-top:8px;min-height:14px"></div>
+      <div class="dc-modal-extra-row">
+        <div class="field">
+          <label class="lbl">Chrome Profile <span class="lbl-hint">optional — for Follow Bot</span></label>
+          <input id="dcChromeProfile" class="inp" type="text" placeholder="e.g. Profile 297">
+        </div>
+        <div class="field">
+          <label class="lbl">Note <span class="lbl-hint">optional — personal label</span></label>
+          <input id="dcNote" class="inp" type="text" placeholder="e.g. main account">
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close="modalDcAdd" type="button">Cancel</button>
+      <button class="btn primary dc-save-btn" id="dcSaveAccBtn" type="button">
+        <i class="bi bi-check-lg"></i> Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Batch Import Discord -->
+<div class="overlay" id="modalDcBatch">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Batch Import Discord</h3>
+      <button class="modal-x" data-close="modalDcBatch" type="button">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <div class="dc-batch-lbl-row">
+          <label class="lbl">Tokens — one per line</label>
+          <span class="dc-batch-count" id="dcBatchLineCount">0 tokens</span>
+        </div>
+        <textarea id="dcBatchText" class="inp textarea" rows="8"
+          placeholder="Paste Discord tokens here, one per line&#10;&#10;Token1&#10;Token2&#10;Token3"></textarea>
+      </div>
+      <div class="dc-batch-prog" id="dcBatchProg" style="display:none">
+        <div class="dc-vp-bar"><div class="dc-vp-fill" id="dcBatchFill"></div></div>
+        <span class="dc-vp-text" id="dcBatchProgText"></span>
+      </div>
+      <div id="dcBatchStatus" class="fetch-st" style="min-height:14px"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close="modalDcBatch" type="button">Cancel</button>
+      <button class="btn primary dc-save-btn" id="dcDoBatchBtn" type="button">
+        <i class="bi bi-upload"></i> Import All
+      </button>
+    </div>
+  </div>
+</div>
+
+</div><!-- #app-clip -->
+</body>
+</html>
