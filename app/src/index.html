@@ -112,6 +112,10 @@
       <span class="nav-ic"><i class="bi bi-display"></i></span><span>Streams</span>
       <span class="nav-count" id="streamCount"></span>
     </button>
+    <button class="nav-btn" data-tab="create-account" data-platform="kick">
+      <span class="nav-ic"><i class="bi bi-person-plus-fill"></i></span><span>Create Account</span>
+      <span class="nav-count" id="kickCreateCount" style="background:rgba(61,255,160,0.15);color:var(--ac)"></span>
+    </button>
 
     <!-- ─── Discord nav buttons (hidden when Kick is active) ─── -->
     <button class="nav-btn" data-tab="discord-dashboard" data-platform="discord">
@@ -1098,164 +1102,6 @@
 
       </div><!-- /msPanelBulk -->
 
-      <!-- ══════════════════════════════════════
-           KICK ACCOUNT CREATOR MODE
-           Auto-registers Kick accounts using mail.tm + visible Chromium
-      ══════════════════════════════════════ -->
-      <div id="msPanelCreator" style="display:none">
-
-        <!-- 1. Settings -->
-        <div class="ms-section">
-          <div class="ms-section-head">
-            <span class="ms-step-num">1</span>
-            <span class="ms-section-title"><i class="bi bi-sliders"></i> Settings</span>
-            <span class="ms-badge" id="kacBadge">Idle</span>
-          </div>
-          <div class="ms-section-body">
-            <div class="kac-grid">
-              <div class="kac-field">
-                <label class="lbl">How many accounts</label>
-                <input id="kacCount" class="inp" type="number" min="1" max="50" value="1">
-                <span class="kac-hint">1–50 per run</span>
-              </div>
-              <div class="kac-field">
-                <label class="lbl">Delay between (sec)</label>
-                <input id="kacGap" class="inp" type="number" min="0" max="600" value="10">
-                <span class="kac-hint">Pause between accounts</span>
-              </div>
-              <div class="kac-field kac-field-wide">
-                <div class="kac-banner">
-                  <i class="bi bi-info-circle"></i>
-                  <span>
-                    Opens a clean Chrome window — <b>fill the form yourself using the copy buttons below</b>.
-                    If Kick shows a captcha, just solve it by hand. The verification code is auto-copied to your clipboard.
-                  </span>
-                </div>
-              </div>
-              <div class="kac-field kac-field-wide">
-                <label class="tog">
-                  <input type="checkbox" id="kacAutoAdd" checked>
-                  <span class="tog-track"><span class="tog-knob"></span></span>
-                  Auto-add created accounts to the Accounts list
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="ms-divider"></div>
-
-        <!-- 2. Run -->
-        <div class="ms-section">
-          <div class="ms-section-head">
-            <span class="ms-step-num">2</span>
-            <span class="ms-section-title"><i class="bi bi-play-circle-fill"></i> Run</span>
-            <span class="ms-badge" id="kacProgress">0 / 0</span>
-          </div>
-          <div class="ms-section-body">
-            <div class="kac-run-row">
-              <button class="btn primary" id="kacStartBtn"><i class="bi bi-play-fill"></i> Start Creating</button>
-              <button class="btn ghost"   id="kacStopBtn"  disabled><i class="bi bi-stop-fill"></i> Stop</button>
-              <button class="btn ghost"   id="kacOpenFileBtn" title="Open created-kick-accounts.txt"><i class="bi bi-folder2-open"></i> Open File</button>
-              <span class="kac-status" id="kacStatus">Ready.</span>
-            </div>
-
-            <!-- Live credentials preview (updates per account) -->
-            <div class="kac-current" id="kacCurrent" style="display:none">
-              <div class="kac-current-title"><i class="bi bi-eye-fill"></i> Current account — click any value to copy</div>
-              <div class="kac-current-grid">
-                <div class="kac-kv"><span class="kac-k">Email</span>    <span class="kac-v copyable" data-copy-from="kacCurEmail" id="kacCurEmail">—</span></div>
-                <div class="kac-kv"><span class="kac-k">Username</span> <span class="kac-v copyable" data-copy-from="kacCurUser"  id="kacCurUser">—</span></div>
-                <div class="kac-kv"><span class="kac-k">Password</span> <span class="kac-v copyable" data-copy-from="kacCurPass"  id="kacCurPass">—</span></div>
-                <div class="kac-kv"><span class="kac-k">Birthday</span> <span class="kac-v copyable" data-copy-from="kacCurBday"  id="kacCurBday">—</span></div>
-              </div>
-
-              <!-- Auto-fill button (Win32 SendKeys, no automation detected) -->
-              <div class="kac-autofill-row">
-                <button class="btn primary" id="kacAutofillBtn" type="button">
-                  <i class="bi bi-keyboard-fill"></i>
-                  <span class="kac-af-label">Auto-Fill Form (3 sec countdown)</span>
-                </button>
-                <span class="kac-hint">
-                  <b>Steps:</b> open Chrome → click <i>Sign Up</i> → click in <i>Email</i> field → press this button → wait 3s → fields type themselves → click the green Sign Up in Chrome → solve captcha if shown
-                </span>
-              </div>
-
-              <!-- Verification code arrival -->
-              <div class="kac-code-row" id="kacCodeRow" style="display:none">
-                <span class="kac-k">Verification code</span>
-                <span class="kac-v kac-v-code copyable" data-copy-from="kacCurCode" id="kacCurCode">—</span>
-                <button class="btn ghost xs" id="kacAutofillCodeBtn" type="button" title="Auto-type the code into the focused input">
-                  <i class="bi bi-keyboard"></i> Auto-type
-                </button>
-                <span class="kac-hint">Auto-copied to clipboard · paste or auto-type</span>
-              </div>
-
-              <!-- Paste-token form (user fills after completing signup in Chrome) -->
-              <div class="kac-finish" id="kacFinish" style="display:none">
-                <div class="kac-current-title" style="margin-top:14px">
-                  <i class="bi bi-key-fill"></i> When you're logged in, paste your Kick token here
-                </div>
-                <details class="kac-howto">
-                  <summary>How do I find my token? (click)</summary>
-                  <ol>
-                    <li>In the Chrome window that's logged into Kick, press <kbd>F12</kbd></li>
-                    <li>Go to the <b>Console</b> tab</li>
-                    <li>Paste this and press Enter:
-                      <code class="kac-snippet" id="kacSnippet">copy(Object.keys(localStorage).map(k=>localStorage.getItem(k)).find(v=>typeof v==='string'&&v.length>50&&v.startsWith('eyJ')))</code>
-                      <button class="kac-snippet-copy" id="kacSnippetCopy" type="button"><i class="bi bi-clipboard"></i> Copy snippet</button>
-                    </li>
-                    <li>The token is now on your clipboard — paste it below</li>
-                  </ol>
-                </details>
-                <textarea id="kacTokenInput" class="inp"
-                  placeholder="Paste the long token here (starts with eyJ…)"
-                  rows="3"
-                  style="resize:vertical;min-height:64px;font-family:var(--mono);font-size:11px;line-height:1.5;width:100%"></textarea>
-                <div class="kac-finish-row">
-                  <button class="btn primary" id="kacSaveTokenBtn"><i class="bi bi-check2-circle"></i> Save Account</button>
-                  <button class="btn ghost"   id="kacSkipBtn"     ><i class="bi bi-x-circle"></i> Skip / Cancel</button>
-                  <span class="kac-hint" id="kacSaveStatus"></span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="ms-divider"></div>
-
-        <!-- 3. Activity Log -->
-        <div class="ms-section">
-          <div class="ms-section-head">
-            <span class="ms-step-num">3</span>
-            <span class="ms-section-title"><i class="bi bi-terminal"></i> Activity Log</span>
-            <button class="btn ghost xs" id="kacClearLog" style="margin-left:auto"><i class="bi bi-trash"></i> Clear</button>
-          </div>
-          <div class="ms-section-body">
-            <div class="kac-log" id="kacLog">
-              <div class="kac-log-empty">No activity yet — press Start Creating to begin.</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="ms-divider"></div>
-
-        <!-- 4. Created accounts table -->
-        <div class="ms-section">
-          <div class="ms-section-head">
-            <span class="ms-step-num">4</span>
-            <span class="ms-section-title"><i class="bi bi-collection-fill"></i> Created Accounts</span>
-            <span class="ms-badge" id="kacCreatedCount">0</span>
-          </div>
-          <div class="ms-section-body">
-            <div class="kac-created" id="kacCreatedList">
-              <div class="kac-log-empty">Successfully-created accounts will appear here.</div>
-            </div>
-          </div>
-        </div>
-
-      </div><!-- /msPanelCreator -->
-
     </div><!-- /msgSystemCard -->
 
     <!-- Keep legacy IDs alive (other code references these) -->
@@ -1779,22 +1625,6 @@
 
       </div><!-- /avCardBody -->
     </div><!-- /avCard -->
-
-    <!-- MODULE 3 - Account Creator UI mount. Existing IDs are moved here by script.js. -->
-    <div class="auto-module" id="accountCreatorCard">
-      <div class="auto-mod-hd open">
-        <div class="auto-mod-icon green"><i class="bi bi-person-plus-fill"></i></div>
-        <div class="auto-mod-info">
-          <div class="auto-mod-title">Kick Account Creator</div>
-          <div class="auto-mod-sub">Visible Chromium account creation workflow</div>
-        </div>
-        <span class="auto-mod-badge idle">Tools moved</span>
-        <i class="bi bi-chevron-up auto-mod-chevron open"></i>
-      </div>
-      <div class="auto-mod-body open" id="kacCardBody">
-        <div id="kacAutomationHost"></div>
-      </div>
-    </div>
 
   </section>
 
@@ -2662,6 +2492,112 @@
         <div id="kikProxyResults" class="kik-proxy-results"></div>
       </div>
     </div>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════
+       CREATE ACCOUNT (in-app BrowserView)
+  ══════════════════════════════════════════ -->
+  <section class="page" id="page-create-account">
+    <div class="kca-topbar">
+      <div class="kca-topbar-left">
+        <div class="kca-topbar-title"><i class="bi bi-person-plus-fill"></i> Create Account</div>
+        <div class="kca-topbar-sub">In-app registration — no browser window opens</div>
+      </div>
+      <div class="kca-stats-bar">
+        <div class="kca-stat kca-stat-green"><span id="kcaStatCreated">0</span><span class="kca-stat-lbl">Created</span></div>
+        <div class="kca-stat kca-stat-red"><span id="kcaStatFailed">0</span><span class="kca-stat-lbl">Failed</span></div>
+        <div class="kca-stat kca-stat-blue"><span id="kcaStatRunning">0</span><span class="kca-stat-lbl">Running</span></div>
+      </div>
+    </div>
+
+    <div class="kca-body">
+
+      <!-- LEFT — Configuration -->
+      <div class="kca-card kca-card-config">
+        <div class="kca-card-title"><i class="bi bi-sliders"></i> Configuration</div>
+
+        <div class="kca-field">
+          <label class="lbl">Quantity</label>
+          <input id="kcaCount" class="inp" type="number" min="1" max="50" value="1">
+          <span class="kca-hint">1–50 accounts per run</span>
+        </div>
+
+        <div class="kca-field">
+          <label class="lbl">Delay between accounts (sec)</label>
+          <input id="kcaDelay" class="inp" type="number" min="0" max="600" value="5">
+        </div>
+
+        <div class="kca-field">
+          <label class="lbl">Proxy <span class="kca-hint">(optional)</span></label>
+          <input id="kcaProxy" class="inp" type="text" placeholder="http://user:pass@host:port  or  host:port:user:pass">
+          <div class="kca-proxy-row">
+            <button class="btn ghost xs" id="kcaTestProxyBtn"><i class="bi bi-wifi"></i> Test Proxy</button>
+            <span id="kcaProxyStatus" class="kca-proxy-status"></span>
+          </div>
+        </div>
+
+        <div class="kca-field">
+          <label class="tog">
+            <input type="checkbox" id="kcaAutoAdd" checked>
+            <span class="tog-track"><span class="tog-knob"></span></span>
+            Auto-add to Accounts list
+          </label>
+        </div>
+
+        <div class="kca-btn-row">
+          <button class="btn primary" id="kcaStartBtn"><i class="bi bi-play-fill"></i> Start</button>
+          <button class="btn danger"  id="kcaStopBtn"  style="display:none"><i class="bi bi-stop-fill"></i> Stop</button>
+        </div>
+      </div>
+
+      <!-- RIGHT — Live Navigator Log -->
+      <div class="kca-card kca-card-log">
+        <div class="kca-card-title"><i class="bi bi-terminal"></i> Live Navigator Log</div>
+
+        <div class="kik-navigator-badge" style="margin-bottom:10px">
+          <i class="bi bi-eye-slash-fill"></i>
+          Hidden navigator active — all HTTP via in-app BrowserView
+        </div>
+
+        <div class="kca-prog-wrap">
+          <div class="kca-prog-track"><div id="kcaProgFill" class="kca-prog-fill"></div></div>
+          <span id="kcaProgText" class="kca-prog-text">Idle</span>
+        </div>
+
+        <div id="kcaLog" class="kca-log"></div>
+
+        <button class="btn ghost xs" id="kcaClearLog" style="margin-top:6px"><i class="bi bi-trash"></i> Clear Log</button>
+      </div>
+
+    </div><!-- /.kca-body -->
+
+    <!-- Created Accounts Table -->
+    <div class="kca-created-section">
+      <div class="kca-created-head">
+        <span class="kca-created-title"><i class="bi bi-collection-fill"></i> Created Accounts</span>
+        <button class="btn ghost xs" id="kcaExportBtn"><i class="bi bi-download"></i> Export</button>
+      </div>
+      <div id="kcaCreatedEmpty" class="kca-created-empty">No accounts created yet — press Start to begin.</div>
+      <div class="kca-tbl-wrap">
+        <table class="kca-tbl">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Email</th>
+              <th>Username</th>
+              <th>Password</th>
+              <th>Birthday</th>
+              <th>Token</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="kcaCreatedBody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </section>
 
 </div><!-- #app-clip -->

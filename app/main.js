@@ -7011,3 +7011,491 @@ ipcMain.handle('kik-event-push', async (_e, payload) => {
     return { ok: true };
   } catch (_) { return { ok: false }; }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KICK CREATE ACCOUNT — In-App BrowserView handler
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let _kcaRunning = false;
+let _kcaStopped = false;
+
+function kcaEmit(data) {
+  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('kick-create-progress', data);
+}
+function kcaLog2(msg, type) {
+  kcaEmit({ step: 'log', msg, type: type || 'info', t: Date.now() });
+}
+
+async function kcaCreateOne(creds, proxy) {
+  const { BrowserView } = require('electron');
+  const view = new BrowserView({
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: false,
+      webSecurity: false,
+    }
+  });
+
+  try {
+    if (proxy) {
+      const pxy = typeof proxy === 'string' ? kikParseProxy(proxy) : proxy;
+      if (pxy) {
+        const proxyRules = pxy.user
+          ? `http://${pxy.user}:${pxy.pass}@${pxy.host}:${pxy.port}`
+          : `http://${pxy.host}:${pxy.port}`;
+        await view.webContents.session.setProxy({ proxyRules });
+        kcaLog2(`Proxy set: ${pxy.host}:${pxy.port}`, 'info');
+      }
+    }
+
+    mainWin.setBrowserView(view);
+    view.setBounds({ x: 0, y: 0, width: 1, height: 1 });
+
+    kcaLog2('Loading kick.com…', 'info');
+    kcaEmit({ step: 'progress', pct: 5, text: 'Loading kick.com…' });
+
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Page load timeout')), 60000);
+      view.webContents.once('did-finish-load', () => { clearTimeout(timer); resolve(); });
+      view.webContents.once('did-fail-load', (_e2, code, desc) => { clearTimeout(timer); reject(new Error('Load failed: ' + desc)); });
+      view.webContents.loadURL('https://kick.com');
+    });
+
+    kcaLog2('Page loaded. Injecting fill script…', 'info');
+    kcaEmit({ step: 'progress', pct: 20, text: 'Injecting fill script…' });
+
+    const fillScript = kacBuildFillScript(creds);
+
+    let fillResult;
+    try {
+      const raw = await view.webContents.executeJavaScript(fillScript, true);
+      fillResult = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (e) {
+      fillResult = { ok: false, error: String(e && e.message || e) };
+    }
+
+    kcaLog2('Fill result: ' + JSON.stringify(fillResult), fillResult && fillResult.ok ? 'success' : 'error');
+
+    if (!fillResult || !fillResult.ok) {
+      throw new Error(fillResult && fillResult.error ? fillResult.error : 'Fill script failed');
+    }
+
+    kcaEmit({ step: 'progress', pct: 50, text: 'Form submitted. Awaiting verification email…' });
+    kcaLog2('Form submitted. Polling for verification email…', 'info');
+
+    let verifyLink = null;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      if (_kcaStopped) throw new Error('Stopped by user');
+      await kacSleep(4000);
+      try {
+        const msgs = await kac1secListMessages(creds.inboxLogin, creds.inboxDomain);
+        if (msgs && msgs.length > 0) {
+          const msgData = await kac1secReadMessage(creds.inboxLogin, creds.inboxDomain, msgs[0].id);
+          const match = (msgData || '').match(/https?:\/\/kick\.com\/[^\s"<>]+verify[^\s"<>]*/i)
+                     || (msgData || '').match(/https?:\/\/kick\.com\/[^\s"<>]+email[^\s"<>]*/i);
+          if (match) { verifyLink = match[0]; break; }
+        }
+      } catch (_e3) { /* keep polling */ }
+      kcaLog2('Waiting for email… (attempt ' + (attempt + 1) + '/30)', 'info');
+    }
+
+    if (!verifyLink) throw new Error('Verification email not received within timeout');
+
+    kcaLog2('Verification email found. Clicking verify link…', 'success');
+    kcaEmit({ step: 'progress', pct: 75, text: 'Verifying email…' });
+
+    await view.webContents.loadURL(verifyLink);
+    await kacSleep(5000);
+
+    kcaEmit({ step: 'progress', pct: 90, text: 'Extracting token…' });
+
+    let token = '';
+    try {
+      token = await view.webContents.executeJavaScript(
+        '(function(){' +
+        '  for(var i=0;i<localStorage.length;i++){' +
+        '    var k=localStorage.key(i);if(!k)continue;' +
+        '    var v=localStorage.getItem(k);if(!v)continue;' +
+        '    try{var o=JSON.parse(v);' +
+        '      if(o&&typeof o.access_token==="string")return o.access_token;' +
+        '      if(o&&typeof o.token==="string"&&o.token.length>20)return o.token;' +
+        '    }catch(_){}' +
+        '    if(typeof v==="string"&&v.length>40&&v.indexOf(".")>0&&/^[A-Za-z0-9._-]+$/.test(v))return v;' +
+        '  }return "";' +
+        '})()',
+        true
+      );
+    } catch (e2) {
+      kcaLog2('Could not extract token: ' + e2.message, 'warn');
+    }
+
+    kcaEmit({ step: 'progress', pct: 100, text: 'Done!' });
+    kcaLog2('Account created! Email: ' + creds.email + ' | Username: ' + creds.kickUsername, 'success');
+
+    return {
+      ok:       true,
+      email:    creds.email,
+      username: creds.kickUsername,
+      password: creds.password,
+      birthday: creds.birthdayIso,
+      token:    token || '',
+    };
+  } finally {
+    try {
+      if (mainWin && !mainWin.isDestroyed()) mainWin.removeBrowserView(view);
+    } catch (_ef) {}
+    try { view.webContents.destroy(); } catch (_ef2) {}
+  }
+}
+
+ipcMain.handle('kick-create-inapp', async (_e, opts) => {
+  if (_kcaRunning) return { ok: false, error: 'Already running' };
+  _kcaRunning = true;
+  _kcaStopped = false;
+
+  const count   = Math.max(1, Math.min(50, parseInt(opts.count) || 1));
+  const delay   = Math.max(0, parseInt(opts.delay) || 5);
+  const proxy   = opts.proxy || null;
+  const autoAdd = opts.autoAdd !== false;
+
+  const results = [];
+  kcaEmit({ step: 'start', total: count });
+
+  try {
+    for (let i = 0; i < count; i++) {
+      if (_kcaStopped) { kcaEmit({ step: 'stopped' }); break; }
+
+      kcaLog2('── Account ' + (i + 1) + ' / ' + count + ' ──', 'info');
+      kcaEmit({ step: 'account-start', index: i, total: count });
+
+      try {
+        const domains  = await kacMailGetDomains();
+        const inbox    = await kac1secGenInbox(domains);
+        const password = kacRandomPassword();
+        const username = kacRandomKickUsername();
+        const birthday = kacRandomBirthday();
+
+        const creds = {
+          email:       inbox.address,
+          inboxLogin:  inbox.login,
+          inboxDomain: inbox.domain,
+          password,
+          kickUsername: username,
+          birthdayIso:  birthday.iso,
+          birthdayUsa:  birthday.usa,
+          subscribe:    false,
+        };
+
+        kcaLog2('Credentials: ' + creds.email + ' / ' + creds.kickUsername, 'info');
+
+        const result = await kcaCreateOne(creds, proxy);
+        result.index = i + 1;
+        results.push(result);
+        kcaEmit({ step: 'account-done', index: i, total: count, account: result, autoAdd });
+
+      } catch (e) {
+        const err = String(e && e.message || e);
+        kcaLog2('Account ' + (i + 1) + ' failed: ' + err, 'error');
+        results.push({ ok: false, index: i + 1, error: err });
+        kcaEmit({ step: 'account-fail', index: i, total: count, error: err });
+      }
+
+      if (i < count - 1 && !_kcaStopped) {
+        kcaLog2('Waiting ' + delay + 's before next account…', 'info');
+        await kacSleep(delay * 1000);
+      }
+    }
+
+    kcaEmit({ step: 'done', total: count, results });
+    return { ok: true, results };
+  } catch (e) {
+    kcaEmit({ step: 'error', error: String(e && e.message || e) });
+    return { ok: false, error: String(e && e.message || e) };
+  } finally {
+    _kcaRunning = false;
+  }
+});
+
+ipcMain.handle('kick-create-inapp-stop', async () => {
+  _kcaStopped = true;
+  return { ok: true };
+});
+
+ipcMain.handle('kick-proxy-test', async (_e, { proxy }) => {
+  if (!proxy || !proxy.trim()) return { ok: false, error: 'No proxy provided' };
+  const pxy = kikParseProxy(proxy.trim());
+  if (!pxy) return { ok: false, error: 'Invalid proxy format' };
+  try {
+    const start = Date.now();
+    const r = await kikNetFetch('https://httpbin.org/ip', { method: 'GET' }, pxy, 15000);
+    const latency = Date.now() - start;
+    if (r.ok || r.status === 200) {
+      let ip = '';
+      try { ip = JSON.parse(r.body).origin || ''; } catch (_ep) {}
+      return { ok: true, latency, ip };
+    }
+    return { ok: false, error: 'HTTP ' + r.status, latency };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message || e) };
+  }
+});
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ *  KICK CREATE ACCOUNT — In-App BrowserView (no external window)
+ *  Uses a hidden BrowserView (0×0 bounds on mainWin) to register Kick
+ *  accounts.  Proxy is injected via session.setProxy() before load.
+ *  Reuses existing kacBuildFillScript / mail helpers already in main.js.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const KCA = { running: false, abort: false, view: null };
+
+function kcaEmit(data) {
+  try {
+    if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('kick-create-progress', data);
+  } catch (_) {}
+}
+function kcaLog(msg, type) { kcaEmit({ step: 'log', msg, type: type || 'info' }); }
+
+// ── Proxy-test IPC ────────────────────────────────────────────────────────────
+ipcMain.handle('kick-proxy-test', async (_e, { proxy }) => {
+  try {
+    const r = await kikNetFetch('https://httpbin.org/ip', { method: 'GET' }, proxy, 10000);
+    if (r.ok || r.status === 200) {
+      let ip = '';
+      try { ip = JSON.parse(r.body).origin || ''; } catch (_) {}
+      return { ok: true, ip };
+    }
+    return { ok: false, error: 'HTTP ' + r.status };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message || e) };
+  }
+});
+
+// ── Stop IPC ──────────────────────────────────────────────────────────────────
+ipcMain.handle('kick-create-inapp-stop', async () => {
+  KCA.abort = true;
+  try {
+    if (KCA.view && !KCA.view.webContents.isDestroyed()) {
+      mainWin && !mainWin.isDestroyed() && mainWin.removeBrowserView(KCA.view);
+      KCA.view.webContents.destroy();
+    }
+  } catch (_) {}
+  KCA.view = null;
+  KCA.running = false;
+  return { ok: true };
+});
+
+// ── Create one account using a hidden BrowserView ─────────────────────────────
+async function kcaCreateOne(creds, proxyStr) {
+  // Build a fresh isolated BrowserView
+  const partition = 'tmp:kca-' + Date.now();
+  const ses = session.fromPartition(partition);
+  ses.setUserAgent(CHROME_UA);
+
+  if (proxyStr) {
+    const pxy = kikParseProxy(proxyStr);
+    if (pxy) {
+      const proxyUrl = 'http://' + (pxy.user ? pxy.user + ':' + pxy.pass + '@' : '') + pxy.host + ':' + pxy.port;
+      try { await ses.setProxy({ proxyRules: proxyUrl }); } catch (_) {}
+    }
+  }
+
+  const view = new (require('electron').BrowserView)({
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: false,
+      webSecurity: false,
+      session: ses,
+    },
+  });
+  KCA.view = view;
+
+  if (mainWin && !mainWin.isDestroyed()) {
+    mainWin.setBrowserView(view);
+    view.setBounds({ x: 0, y: 0, width: 1, height: 1 }); // invisible
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (result) => {
+      if (settled) return;
+      settled = true;
+      try {
+        if (mainWin && !mainWin.isDestroyed()) mainWin.removeBrowserView(view);
+        view.webContents.destroy();
+      } catch (_) {}
+      KCA.view = null;
+      if (result instanceof Error) reject(result); else resolve(result);
+    };
+
+    const timer = setTimeout(() => done(new Error('Timeout — account creation took too long')), 180000);
+
+    view.webContents.on('did-finish-load', async () => {
+      if (KCA.abort) { clearTimeout(timer); done(new Error('Aborted')); return; }
+      try {
+        kcaLog('Page loaded — injecting fill script…', 'info');
+        const script = kacBuildFillScript(creds);
+        const resultJson = await view.webContents.executeJavaScript(script + '; "ok"', true).catch(e => JSON.stringify({ok:false,step:'inject',reason:e.message}));
+        let fillResult = {};
+        try { fillResult = JSON.parse(resultJson); } catch (_) { fillResult = { ok: false }; }
+
+        if (fillResult && fillResult.ok === false) {
+          kcaLog('Form fill issue: ' + (fillResult.reason || fillResult.step || 'unknown'), 'warn');
+        } else {
+          kcaLog('Form submitted — waiting for verification email…', 'info');
+        }
+
+        // Poll for verification email via 1secmail (creds.mailLogin / creds.mailDomain)
+        let verifyCode = null;
+        const pollDeadline = Date.now() + 90000;
+        while (Date.now() < pollDeadline && !KCA.abort) {
+          await kacSleep(4000);
+          try {
+            const msgs = await kac1secListMessages(creds.mailLogin, creds.mailDomain);
+            if (msgs && msgs.length > 0) {
+              const msg = await kac1secReadMessage(creds.mailLogin, creds.mailDomain, msgs[0].id);
+              const body = (msg && (msg.htmlBody || msg.textBody || msg.body)) || '';
+              const m = body.match(/\b(\d{5,8})\b/) || body.match(/code[:\s]+(\w{5,10})/i);
+              if (m) { verifyCode = m[1]; break; }
+            }
+          } catch (_) {}
+        }
+
+        if (verifyCode) {
+          kcaLog('Verification code received: ' + verifyCode, 'ok');
+          // Type the code into the focused verification input
+          try {
+            await view.webContents.executeJavaScript(`
+              (function(){
+                var inputs = Array.from(document.querySelectorAll('input')).filter(function(i){
+                  var cs = getComputedStyle(i);
+                  return cs.display!=='none' && cs.visibility!=='hidden';
+                });
+                var codeEl = inputs.find(function(i){ return /code|otp|verif/i.test(i.name+i.id+i.placeholder); }) || inputs[inputs.length-1];
+                if(codeEl){
+                  var desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
+                  desc && desc.set && desc.set.call(codeEl, ${JSON.stringify(verifyCode)});
+                  codeEl.dispatchEvent(new Event('input',{bubbles:true}));
+                  codeEl.dispatchEvent(new Event('change',{bubbles:true}));
+                }
+              })()
+            `, true).catch(() => {});
+            await kacSleep(800);
+            // Click confirm/submit button
+            await view.webContents.executeJavaScript(`
+              (function(){
+                var btns = Array.from(document.querySelectorAll('button,[role="button"]'));
+                var confirm = btns.find(function(b){ return /confirm|verif|submit|continue|next/i.test(b.textContent); });
+                if(confirm) confirm.click();
+              })()
+            `, true).catch(() => {});
+            await kacSleep(2000);
+          } catch (_) {}
+        } else {
+          kcaLog('No verification code received — continuing anyway', 'warn');
+        }
+
+        // Extract bearer token from localStorage
+        let token = '';
+        try {
+          token = await view.webContents.executeJavaScript(`
+            (function(){
+              var keys=['auth._token.local','auth._token.laravelPassport','auth._token.kick','token','auth_token','access_token'];
+              for(var k of keys){ var v=localStorage.getItem(k); if(v&&v.length>30) return v.replace(/^Bearer\\s+/i,''); }
+              for(var k of Object.keys(localStorage)){ var v=localStorage.getItem(k); if(v&&typeof v==='string'&&v.length>50&&v.startsWith('eyJ')) return v; }
+              return '';
+            })()
+          `, true);
+        } catch (_) {}
+
+        if (token) kcaLog('Token extracted ✓', 'ok');
+        else kcaLog('Token not found — account may still have been created', 'warn');
+
+        clearTimeout(timer);
+        done({ email: creds.email, username: creds.kickUsername, password: creds.password, birthday: creds.birthdayUsa, token: token || '', ok: true });
+      } catch (e) {
+        clearTimeout(timer);
+        done(new Error('Script error: ' + e.message));
+      }
+    });
+
+    view.webContents.on('did-fail-load', (_e, code, desc) => {
+      clearTimeout(timer);
+      done(new Error('Page load failed: ' + desc + ' (' + code + ')'));
+    });
+
+    view.webContents.loadURL('https://kick.com').catch(e => {
+      clearTimeout(timer);
+      done(new Error('loadURL failed: ' + e.message));
+    });
+  });
+}
+
+// ── Main create IPC ───────────────────────────────────────────────────────────
+ipcMain.handle('kick-create-inapp', async (_e, { count, delay, proxy, autoAdd }) => {
+  if (KCA.running) return { ok: false, error: 'Already running' };
+  KCA.running = true;
+  KCA.abort   = false;
+
+  const total = Math.max(1, Math.min(50, parseInt(count) || 1));
+  const delayMs = Math.max(0, parseInt(delay) || 5) * 1000;
+  const created = [];
+  let failed = 0;
+
+  kcaEmit({ step: 'start', total });
+
+  for (let i = 0; i < total; i++) {
+    if (KCA.abort) { kcaLog('Stopped by user.', 'warn'); break; }
+
+    kcaEmit({ step: 'progress', done: i, total });
+    kcaLog('── Account ' + (i+1) + ' / ' + total + ' ──', 'head');
+
+    let creds;
+    try {
+      // Generate temp email via 1secmail
+      const mailInfo = await kac1secGenInbox();
+      const bday = kacRandomBirthday();
+      creds = {
+        email:       mailInfo.email,
+        mailLogin:   mailInfo.login,
+        mailDomain:  mailInfo.domain,
+        kickUsername: kacRandomKickUsername(),
+        password:    kacRandomPassword(),
+        birthdayIso: bday.iso,
+        birthdayUsa: bday.usa,
+        subscribe:   false,
+      };
+      kcaLog('Email: ' + creds.email + '  User: ' + creds.kickUsername, 'info');
+    } catch (e) {
+      kcaLog('Failed to generate credentials: ' + e.message, 'error');
+      failed++;
+      kcaEmit({ step: 'failed', done: i+1, total, failed });
+      if (i < total - 1 && !KCA.abort) await kacSleep(delayMs);
+      continue;
+    }
+
+    try {
+      const result = await kcaCreateOne(creds, proxy);
+      created.push(result);
+      if (result.token) {
+        kacAppendFile(result.email, result.password, result.token);
+      }
+      kcaEmit({ step: 'account', account: result, done: i+1, total, created: created.length, failed });
+      kcaLog('✓ Created: ' + result.username + ' / ' + result.email, 'ok');
+    } catch (e) {
+      if (e.message === 'Aborted') { kcaLog('Stopped.', 'warn'); break; }
+      failed++;
+      kcaLog('✗ Failed: ' + e.message, 'error');
+      kcaEmit({ step: 'failed', done: i+1, total, created: created.length, failed });
+    }
+
+    if (i < total - 1 && !KCA.abort) await kacSleep(delayMs);
+  }
+
+  kcaEmit({ step: 'done', total, created: created.length, failed });
+  kcaLog('Batch done. Created: ' + created.length + '  Failed: ' + failed, 'info');
+  KCA.running = false;
+  KCA.abort   = false;
+  return { ok: true, created, failed };
+});

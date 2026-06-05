@@ -109,6 +109,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('kik-event');
     ipcRenderer.on('kik-event', (_e, d) => cb(d));
   },
+
+  // ── Kick Create Account (in-app BrowserView) ─────────────────────────────
+  kickCreateInApp:     (opts)  => ipcRenderer.invoke('kick-create-inapp',      opts),
+  kickCreateInAppStop: ()      => ipcRenderer.invoke('kick-create-inapp-stop'),
+  kickProxyTest:       (proxy) => ipcRenderer.invoke('kick-proxy-test',        { proxy }),
+  onKickCreateProgress: (cb) => {
+    ipcRenderer.removeAllListeners('kick-create-progress');
+    ipcRenderer.on('kick-create-progress', (_e, d) => cb(d));
+  },
 });
 
 // Discord Tools is exposed as a separate bridge so the existing Discord account

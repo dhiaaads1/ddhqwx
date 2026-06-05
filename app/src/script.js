@@ -3197,14 +3197,7 @@ function msRenderOutput(listId, wrapId, emptyId, badgeId, moreId, data){
 
 function initBulkMsg(){ /* replaced by initMsgSystem */ }
 
-function mountCreatorInAutomation() {
-  const panel = $('msPanelCreator');
-  const host  = $('kacAutomationHost');
-  if (!panel || !host) return;
-  if (panel.parentElement !== host) host.appendChild(panel);
-  panel.style.display = 'block';
-  panel.classList.add('kac-automation-panel');
-}
+function mountCreatorInAutomation() { /* no-op — creator moved to dedicated page */ }
 
 function initMsgSystem(){
   if(!$('msTabSlots')) return;
@@ -9868,4 +9861,224 @@ if (false) (function () {
   else kikBoot();
 
   window.Kik = { createBatch: kikCreateBatch, loadAccounts, renderAccounts: renderKikAccounts, checkProxies: runProxyCheck };
+})();
+
+
+/* ══════════════════════════════════════════════════════════════
+   KICK CREATE ACCOUNT — Renderer module
+   Dedicated page: page-create-account
+   All creation runs in main process via hidden BrowserView.
+══════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  function $c(id) { return document.getElementById(id); }
+
+  const KCA_STATE = {
+    running: false,
+    created: [],
+    stats: { created: 0, failed: 0 },
+  };
+
+  /* ── Log ───────────────────────────────────────────────────── */
+  const _kcaLogBuf = [];
+  let _kcaLogPending = false;
+
+  function kcaLog(msg, type) {
+    const ts = new Date().toLocaleTimeString();
+    _kcaLogBuf.push({ ts, msg: String(msg || ''), type: type || 'info' });
+    if (_kcaLogBuf.length > 500) _kcaLogBuf.shift();
+    if (_kcaLogPending) return;
+    _kcaLogPending = true;
+    requestAnimationFrame(() => {
+      _kcaLogPending = false;
+      const el = $c('kcaLog');
+      if (!el) return;
+      el.innerHTML = _kcaLogBuf.map(r => {
+        const cls = r.type === 'ok' ? 'kl-ok' : r.type === 'error' ? 'kl-err' : r.type === 'warn' ? 'kl-warn' : r.type === 'head' ? 'kl-head' : 'kl-info';
+        return '<div class="kik-log-row ' + cls + '"><span class="kl-ts">' + r.ts + '</span> <span class="kl-msg">' + r.msg.replace(/</g,'&lt;') + '</span></div>';
+      }).join('');
+      el.scrollTop = el.scrollHeight;
+    });
+  }
+
+  /* ── Progress bar ───────────────────────────────────────────── */
+  function kcaSetProgress(done, total, label) {
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const fill = $c('kcaProgFill');
+    const text = $c('kcaProgText');
+    if (fill) fill.style.width = pct + '%';
+    if (text) text.textContent = label || (done + ' / ' + total);
+  }
+
+  function kcaSetStats() {
+    const c = $c('kcaStatCreated'), f = $c('kcaStatFailed'), r = $c('kcaStatRunning');
+    if (c) c.textContent = KCA_STATE.stats.created;
+    if (f) f.textContent = KCA_STATE.stats.failed;
+    if (r) r.textContent = KCA_STATE.running ? '1' : '0';
+    const badge = $c('kickCreateCount');
+    if (badge) badge.textContent = KCA_STATE.stats.created || '';
+  }
+
+  /* ── Created accounts table ─────────────────────────────────── */
+  function kcaRenderTable() {
+    const tbody = $c('kcaCreatedBody');
+    const empty = $c('kcaCreatedEmpty');
+    if (!tbody) return;
+    if (!KCA_STATE.created.length) {
+      tbody.innerHTML = '';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    tbody.innerHTML = KCA_STATE.created.map((a, i) => {
+      const tok = a.token ? a.token.slice(0, 20) + '…' : '—';
+      const statusCls = a.token ? 'kca-status-ok' : 'kca-status-warn';
+      const statusLabel = a.token ? '✓ Token' : '⚠ No token';
+      return '<tr>' +
+        '<td class="kca-td-num">' + (i+1) + '</td>' +
+        '<td class="kca-td-mono">' + esc(a.email) + '</td>' +
+        '<td><b>' + esc(a.username) + '</b></td>' +
+        '<td class="kca-td-mono kca-td-pass">' + esc(a.password) + '</td>' +
+        '<td class="kca-td-dim">' + esc(a.birthday||'') + '</td>' +
+        '<td class="kca-td-mono kca-td-tok" title="' + esc(a.token||'') + '">' + esc(tok) + '</td>' +
+        '<td><span class="' + statusCls + '">' + statusLabel + '</span></td>' +
+        '<td>' +
+          '<button class="btn ghost xs kca-copy-btn" data-idx="' + i + '" title="Copy email:pass:token">Copy</button>' +
+          '<button class="btn danger xs kca-del-btn" data-idx="' + i + '" style="margin-left:4px">Del</button>' +
+        '</td>' +
+        '</tr>';
+    }).join('');
+    tbody.querySelectorAll('.kca-copy-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const a = KCA_STATE.created[parseInt(this.dataset.idx)];
+        if (!a) return;
+        navigator.clipboard.writeText(a.email + ':' + a.password + ':' + a.username + ':' + (a.token || '')).then(() => {
+          if (typeof notify === 'function') notify('Copied account', 'success');
+        });
+      });
+    });
+    tbody.querySelectorAll('.kca-del-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const idx = parseInt(this.dataset.idx);
+        KCA_STATE.created.splice(idx, 1);
+        kcaRenderTable();
+      });
+    });
+  }
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  /* ── Progress event handler ─────────────────────────────────── */
+  function kcaHandleProgress(d) {
+    if (!d) return;
+    if (d.step === 'log') {
+      kcaLog(d.msg, d.type);
+    } else if (d.step === 'start') {
+      kcaSetProgress(0, d.total, '0 / ' + d.total);
+    } else if (d.step === 'progress') {
+      kcaSetProgress(d.done, d.total);
+    } else if (d.step === 'account') {
+      KCA_STATE.stats.created++;
+      KCA_STATE.created.unshift(d.account);
+      kcaSetProgress(d.done, d.total);
+      kcaSetStats();
+      kcaRenderTable();
+    } else if (d.step === 'failed') {
+      KCA_STATE.stats.failed++;
+      kcaSetStats();
+    } else if (d.step === 'done') {
+      KCA_STATE.running = false;
+      kcaSetProgress(d.total, d.total, 'Done — ' + d.created + ' created');
+      kcaSetStats();
+      kcaBtns(false);
+    }
+  }
+
+  /* ── Button state ───────────────────────────────────────────── */
+  function kcaBtns(running) {
+    if ($c('kcaStartBtn')) $c('kcaStartBtn').style.display = running ? 'none' : '';
+    if ($c('kcaStopBtn'))  $c('kcaStopBtn').style.display  = running ? '' : 'none';
+    KCA_STATE.running = running;
+    kcaSetStats();
+  }
+
+  /* ── Boot ───────────────────────────────────────────────────── */
+  function kcaBoot() {
+    if (!$c('kcaStartBtn')) return;
+
+    // Register progress listener
+    if (window.electronAPI && window.electronAPI.onKickCreateProgress) {
+      window.electronAPI.onKickCreateProgress(kcaHandleProgress);
+    }
+
+    // Start
+    $c('kcaStartBtn').addEventListener('click', async () => {
+      if (KCA_STATE.running) return;
+      const count  = Math.max(1, Math.min(50, parseInt(($c('kcaCount')||{}).value) || 1));
+      const delay  = Math.max(0, parseInt(($c('kcaDelay')||{}).value) || 5);
+      const proxy  = (($c('kcaProxy')||{}).value || '').trim() || null;
+      const autoAdd = ($c('kcaAutoAdd') || {}).checked !== false;
+      kcaBtns(true);
+      _kcaLogBuf.length = 0;
+      kcaLog('Starting batch: ' + count + ' account(s)' + (proxy ? ' via proxy' : ' direct'), 'info');
+      kcaSetProgress(0, count, '0 / ' + count);
+      if (window.electronAPI && window.electronAPI.kickCreateInApp) {
+        window.electronAPI.kickCreateInApp({ count, delay, proxy, autoAdd }).catch(e => {
+          kcaLog('IPC error: ' + e.message, 'error');
+          kcaBtns(false);
+        });
+      } else {
+        kcaLog('electronAPI not available (non-Electron context)', 'warn');
+        kcaBtns(false);
+      }
+    });
+
+    // Stop
+    $c('kcaStopBtn').addEventListener('click', () => {
+      kcaLog('Stop requested…', 'warn');
+      if (window.electronAPI && window.electronAPI.kickCreateInAppStop) {
+        window.electronAPI.kickCreateInAppStop();
+      }
+      kcaBtns(false);
+    });
+
+    // Test proxy
+    $c('kcaTestProxyBtn') && $c('kcaTestProxyBtn').addEventListener('click', async () => {
+      const proxy = (($c('kcaProxy')||{}).value || '').trim();
+      const status = $c('kcaProxyStatus');
+      if (!proxy) { if (status) { status.textContent = 'Enter a proxy first'; status.className = 'kca-proxy-status warn'; } return; }
+      if (status) { status.textContent = 'Testing…'; status.className = 'kca-proxy-status dim'; }
+      try {
+        const r = await window.electronAPI.kickProxyTest(proxy);
+        if (r && r.ok) {
+          if (status) { status.textContent = '✓ Working — IP: ' + (r.ip || '?'); status.className = 'kca-proxy-status ok'; }
+        } else {
+          if (status) { status.textContent = '✗ ' + (r && r.error || 'Failed'); status.className = 'kca-proxy-status fail'; }
+        }
+      } catch (e) {
+        if (status) { status.textContent = '✗ ' + e.message; status.className = 'kca-proxy-status fail'; }
+      }
+    });
+
+    // Clear log
+    $c('kcaClearLog') && $c('kcaClearLog').addEventListener('click', () => {
+      _kcaLogBuf.length = 0;
+      const el = $c('kcaLog'); if (el) el.innerHTML = '';
+    });
+
+    // Export
+    $c('kcaExportBtn') && $c('kcaExportBtn').addEventListener('click', () => {
+      if (!KCA_STATE.created.length) return;
+      const text = KCA_STATE.created.map(a => a.email + ':' + a.password + ':' + a.username + ':' + (a.token||'')).join('\n');
+      navigator.clipboard.writeText(text).then(() => {
+        if (typeof notify === 'function') notify('Exported ' + KCA_STATE.created.length + ' accounts', 'success');
+      });
+    });
+
+    kcaSetStats();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', kcaBoot);
+  else kcaBoot();
 })();
