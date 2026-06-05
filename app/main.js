@@ -6919,12 +6919,21 @@ function kikNetFetch(url, opts, proxy, timeoutMs) {
 
         if (isHttps) {
           const tls = require('tls');
-          const socket = await kikProxyConnect(pxy, host, port, ms);
-          const tlsSocket = tls.connect({ socket, servername: host, rejectUnauthorized: false });
+          const rawSock = await kikProxyConnect(pxy, host, port, ms);
+          // Wait for TLS handshake before sending — avoids WRONG_VERSION_NUMBER
+          const tlsSocket = await new Promise((ok, err) => {
+            const s = tls.connect({ socket: rawSock, servername: host, rejectUnauthorized: false });
+            s.once('secureConnect', () => ok(s));
+            s.once('error', err);
+          });
+          // Use http.request with createConnection so we don't double-wrap TLS
           result = await new Promise((res2, rej2) => {
             timer = setTimeout(() => rej2(new Error('TLS timeout')), ms);
             tlsSocket.on('error', (e) => { clearTimeout(timer); rej2(e); });
-            const r = https.request(Object.assign({}, reqOpts, { socket: tlsSocket, hostname: host }), (response) => {
+            const r = http.request(Object.assign({}, reqOpts, {
+              createConnection: () => tlsSocket,
+              hostname: host,
+            }), (response) => {
               let data = '';
               response.setEncoding('utf8');
               response.on('data', (c) => data += c);
@@ -7094,9 +7103,44 @@ async function kickReq(method, path, body, jar, proxy, extraHeaders) {
   return { status: r.status, ok: r.ok, body: r.body, jar: updatedJar };
 }
 
+// ── tempmails.me API (replaces 1secmail) ──────────────────────────────────
+const TMAILS_KEY    = 'vm_2cb7522806fd603ee245cc063a293b4c46adf0d14c8fa3d00270be65b0f419da';
+const TMAILS_DOMAIN = 'diren.tech';
+
+async function tempMailsReq(action, params) {
+  const qs = new URLSearchParams(Object.assign({ action, api_key: TMAILS_KEY }, params || {})).toString();
+  const r  = await kikNetFetch('https://tempmails.me/api.php?' + qs, {
+    method: 'GET',
+    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+  }, null, 15000);
+  if (r.status >= 400) throw new Error('tempmails HTTP ' + r.status);
+  let j;
+  try { j = JSON.parse(r.body); } catch (_) { throw new Error('tempmails bad JSON: ' + String(r.body).slice(0, 80)); }
+  if (!j.success) throw new Error('tempmails API error: ' + (j.error || JSON.stringify(j).slice(0, 80)));
+  return j;
+}
+
+async function tempMailsGenInbox() {
+  const j = await tempMailsReq('generate', { domain: TMAILS_DOMAIN });
+  const email = String(j.email || '');
+  if (!email.includes('@')) throw new Error('tempmails returned invalid email: ' + email);
+  const at = email.indexOf('@');
+  return { email, login: email.slice(0, at), domain: email.slice(at + 1) };
+}
+
+async function tempMailsListMessages(email) {
+  const j = await tempMailsReq('inbox', { email });
+  return Array.isArray(j.messages) ? j.messages : [];
+}
+
+async function tempMailsReadMessage(email, id) {
+  const j = await tempMailsReq('message', { email, id: String(id) });
+  return j.message || {};
+}
+
 // ── Single account creation — pure HTTP ───────────────────────────────────
 async function kcaCreateOneAPI(proxy) {
-  const mailInfo  = await kac1secGenInbox();
+  const mailInfo  = await tempMailsGenInbox();
   const bday      = kacRandomBirthday();
   const password  = kacRandomPassword();
   let   username  = kacRandomKickUsername();
@@ -7176,26 +7220,30 @@ async function kcaCreateOneAPI(proxy) {
     }
   }
 
-  // ── Step 3: Poll email for verification code / link ─────────────────────
+  // ── Step 3: Poll tempmails.me inbox for verification code / link ─────────
   kcaLog('Polling inbox for verification email…', 'dim');
   let verifyCode = null;
   let verifyLink = null;
   const pollDeadline = Date.now() + 90000;
   while (Date.now() < pollDeadline && !KCA.abort) {
-    await kacSleep(4000);
+    await kacSleep(5000);
     try {
-      const msgs = await kac1secListMessages(mailInfo.login, mailInfo.domain);
+      const msgs = await tempMailsListMessages(mailInfo.email);
       if (msgs && msgs.length > 0) {
-        const msg = await kac1secReadMessage(mailInfo.login, mailInfo.domain, msgs[0].id);
-        const body = (msg && (msg.htmlBody || msg.textBody || msg.body)) || '';
-        // Try numeric code first
+        // Find a Kick-related message
+        const kickMsg = msgs.find(m => {
+          const subj = String((m.subject || m.title || '')).toLowerCase();
+          const from = String((m.from || m.sender || '')).toLowerCase();
+          return subj.includes('kick') || subj.includes('verif') || subj.includes('confirm') || from.includes('kick');
+        }) || msgs[0];
+        const raw = await tempMailsReadMessage(mailInfo.email, kickMsg.id);
+        const body = String(raw.body || raw.html || raw.text || '');
         const mCode = body.match(/\b(\d{5,8})\b/) || body.match(/code[:\s]+(\w{5,10})/i);
         if (mCode) { verifyCode = mCode[1]; break; }
-        // Try verification link
         const mLink = body.match(/https?:\/\/[^\s"'<>]*kick\.com[^\s"'<>]*(verif|confirm|activate)[^\s"'<>]*/i);
         if (mLink) { verifyLink = mLink[0]; break; }
       }
-    } catch (_) {}
+    } catch (e) { kcaLog('Inbox poll error: ' + e.message, 'warn'); }
   }
 
   // ── Step 4a: Click verify link ──────────────────────────────────────────
