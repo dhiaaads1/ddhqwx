@@ -7169,14 +7169,13 @@ ipcMain.handle('kick-create-inapp', async (_e, opts) => {
       kcaEmit({ step: 'account-start', index: i, total: count });
 
       try {
-        const domains  = await kacMailGetDomains();
-        const inbox    = await kac1secGenInbox(domains);
+        const inbox    = await kac1secGenInbox();
         const password = kacRandomPassword();
         const username = kacRandomKickUsername();
         const birthday = kacRandomBirthday();
 
         const creds = {
-          email:       inbox.address,
+          email:       inbox.email,
           inboxLogin:  inbox.login,
           inboxDomain: inbox.domain,
           password,
