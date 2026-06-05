@@ -7074,7 +7074,54 @@ function parseCookies(setCookieHeader) {
 function mergeCookies(a, b) { return Object.assign({}, a, b); }
 function jarToString(jar) { return Object.entries(jar).map(([k, v]) => k + '=' + v).join('; '); }
 
-// ── Core Kick API helper — wraps kikNetFetch with cookie jar ──────────────
+// ── Electron net fetch — uses Chromium network stack (bypasses TLS fingerprint blocks) ──
+// Used for direct (no-proxy) requests to Cloudflare-protected sites.
+function electronNetFetch(url, opts, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const { net } = require('electron');
+    const method  = (opts && opts.method)  || 'GET';
+    const headers = (opts && opts.headers) || {};
+    const bodyStr = (opts && opts.body)    ? String(opts.body) : null;
+    const ms      = timeoutMs || 20000;
+
+    let req;
+    const timer = setTimeout(() => {
+      try { if (req) req.abort(); } catch (_) {}
+      reject(new Error('Request timeout'));
+    }, ms);
+
+    try {
+      req = net.request({ url, method });
+    } catch (e) {
+      clearTimeout(timer);
+      return reject(e);
+    }
+
+    Object.entries(headers).forEach(([k, v]) => { try { req.setHeader(k, String(v)); } catch (_) {} });
+
+    let data = '';
+    req.on('response', (response) => {
+      const resHeaders = {};
+      // Flatten header arrays to strings for Set-Cookie compatibility
+      Object.entries(response.headers || {}).forEach(([k, v]) => {
+        resHeaders[k.toLowerCase()] = Array.isArray(v) ? v : [v];
+      });
+      response.on('data',  (chunk) => { data += chunk.toString(); });
+      response.on('end',   ()      => {
+        clearTimeout(timer);
+        const status = response.statusCode || 0;
+        resolve({ ok: status >= 200 && status < 300, status, headers: resHeaders, body: data });
+      });
+      response.on('error', (e) => { clearTimeout(timer); reject(e); });
+    });
+    req.on('error',    (e) => { clearTimeout(timer); reject(e); });
+
+    if (bodyStr) req.write(bodyStr);
+    req.end();
+  });
+}
+
+// ── Core Kick API helper — uses Chromium stack direct, proxy tunnel via kikNetFetch ──
 async function kickReq(method, path, body, jar, proxy, extraHeaders) {
   const url = path.startsWith('http') ? path : 'https://kick.com' + path;
   const xsrf = (jar && jar['XSRF-TOKEN']) ? decodeURIComponent(jar['XSRF-TOKEN']) : '';
@@ -7088,17 +7135,19 @@ async function kickReq(method, path, body, jar, proxy, extraHeaders) {
   }, extraHeaders || {});
   if (jar && Object.keys(jar).length) headers['Cookie'] = jarToString(jar);
   if (xsrf) headers['X-XSRF-TOKEN'] = xsrf;
-  if (body) {
-    headers['Content-Type'] = 'application/json';
-  }
-  const r = await kikNetFetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  }, proxy || null, 20000);
-  // Merge returned cookies into jar
+  if (body) headers['Content-Type'] = 'application/json';
+
+  const reqOpts = { method, headers, body: body ? JSON.stringify(body) : undefined };
+
+  // Use Chromium stack for direct requests (avoids Cloudflare TLS fingerprint block).
+  // Use Node.js proxy tunnel when a proxy is specified.
+  const r = proxy
+    ? await kikNetFetch(url, reqOpts, proxy, 25000)
+    : await electronNetFetch(url, reqOpts, 25000);
+
+  // Merge returned Set-Cookie headers into jar
   const setCookie = r.headers && (r.headers['set-cookie'] || r.headers['Set-Cookie']);
-  const newCookies = parseCookies(setCookie);
+  const newCookies = parseCookies(Array.isArray(setCookie) ? setCookie : [setCookie]);
   const updatedJar = mergeCookies(jar || {}, newCookies);
   return { status: r.status, ok: r.ok, body: r.body, jar: updatedJar };
 }
@@ -7109,10 +7158,11 @@ const TMAILS_DOMAIN = 'diren.tech';
 
 async function tempMailsReq(action, params) {
   const qs = new URLSearchParams(Object.assign({ action, api_key: TMAILS_KEY }, params || {})).toString();
-  const r  = await kikNetFetch('https://tempmails.me/api.php?' + qs, {
+  // Always use Chromium stack — tempmails.me is behind Cloudflare
+  const r  = await electronNetFetch('https://tempmails.me/api.php?' + qs, {
     method: 'GET',
-    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
-  }, null, 15000);
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' },
+  }, 15000);
   if (r.status >= 400) throw new Error('tempmails HTTP ' + r.status);
   let j;
   try { j = JSON.parse(r.body); } catch (_) { throw new Error('tempmails bad JSON: ' + String(r.body).slice(0, 80)); }
