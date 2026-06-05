@@ -16415,11 +16415,11 @@ body:not(.platform-kik) #page-kik-accounts,
 body:not(.platform-kik) #page-kik-create { display: none !important; }
 
 /* ── Shared Kik layout ─────────────────────────────────────── */
-#page-kik-accounts,
-#page-kik-create {
-  padding: 16px 20px;
+#page-kik-accounts.active,
+#page-kik-create.active {
   display: flex;
   flex-direction: column;
+  padding: 16px 20px;
   gap: 14px;
   overflow-y: auto;
   height: 100%;
@@ -16649,10 +16649,10 @@ body:not(.platform-kik) #page-kik-create { display: none !important; }
 .kl-dim  .kl-msg { color: #888; }
 
 /* ── Proxies page ────────────────────────────────────────────── */
-#page-kik-proxies {
-  padding: 16px 20px;
+#page-kik-proxies.active {
   display: flex;
   flex-direction: column;
+  padding: 16px 20px;
   gap: 14px;
   overflow-y: auto;
   height: 100%;
@@ -16730,10 +16730,10 @@ code {
    KICK CREATE ACCOUNT PAGE
    ════════════════════════════════════════════════════════════════════════════ */
 
-#page-create-account {
-  padding: 16px 20px;
+#page-create-account.active {
   display: flex;
   flex-direction: column;
+  padding: 16px 20px;
   gap: 14px;
   overflow-y: auto;
   height: 100%;
