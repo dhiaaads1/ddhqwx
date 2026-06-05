@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FLT — License</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  /* ── Variables ── */
+  :root {
+    --bg:      #0c1018;
+    --s1:      #111827;
+    --s2:      #151e2d;
+    --s3:      #1c2738;
+    --s4:      #21304a;
+    --border:  rgba(255,255,255,0.055);
+    --bd2:     rgba(255,255,255,0.090);
+    --bd3:     rgba(91,108,240,0.22);
+    --bd-red:  rgba(229,72,77,0.24);
+    --text:    #eaecf4;
+    --text2:   #7f8ea3;
+    --dim:     #4b5a6e;
+    --ac:      #5b6cf0;
+    --ac2:     #7289da;
+    --ac-dim:  rgba(91,108,240,0.08);
+    --ac-glow: rgba(91,108,240,0.20);
+    --green:   #3fa876;
+    --red:     #e5484d;
+    --rd:      rgba(229,72,77,0.06);
+    --rb:      rgba(229,72,77,0.22);
+    --yellow:  #f5c842;
+
+    --tr:      0.15s cubic-bezier(.2,.8,.2,1);
+    --tr-sp:   0.28s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 520px; height: 380px;
+    background: transparent;
+    font-family: 'Inter', 'SF Pro Display', 'Segoe UI', sans-serif;
+    color: var(--text);
+    user-select: none;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* ── Shell (the window card) ── */
+  .shell {
+    width: 100%; height: 100%;
+    background: var(--s1);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    display: flex; flex-direction: column;
+    box-shadow:
+      0 20px 60px rgba(0,0,0,0.55),
+      inset 0 1px 0 rgba(255,255,255,0.03);
+    position: relative; overflow: hidden;
+
+    /* Pop-in on open */
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+    animation: shellPopIn 0.32s cubic-bezier(.2,.8,.2,1) 0.05s both;
+  }
+  @keyframes shellPopIn {
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  /* Very subtle top accent */
+  .shell::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(91,108,240,0.3), transparent);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ── Titlebar ── */
+  .titlebar {
+    -webkit-app-region: drag;
+    height: 38px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px 0 16px;
+    border-bottom: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    background: var(--s1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+  }
+  .tb-brand {
+    display: flex; align-items: center; gap: 7px;
+    font-family: 'Syne', 'Inter', sans-serif;
+    font-size: 13px; font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.06em;
+    text-shadow: none;
+  }
+  .tb-brand i {
+    font-size: 13px;
+    filter: drop-shadow(0 0 6px var(--ac-glow));
+  }
+  .tb-sub {
+    font-size: 8px; color: var(--dim);
+    letter-spacing: 0.20em;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 400; margin-left: 1px;
+  }
+  .tb-close {
+    -webkit-app-region: no-drag;
+    background: none; border: 1px solid transparent; color: var(--dim);
+    font-size: 15px; cursor: pointer;
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    transition: color var(--tr), background var(--tr), border-color var(--tr);
+  }
+  .tb-close:hover { color: var(--red); background: rgba(240,71,71,0.08); border-color: rgba(240,71,71,0.22); }
+
+  /* ── Body ── */
+  .body {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center;
+    padding: 20px 36px 22px;
+    gap: 14px;
+    /* stagger children in */
+    overflow: hidden;
+  }
+
+  /* ── Icon ── */
+  .icon-wrap {
+    width: 48px; height: 48px; border-radius: 14px;
+    background: var(--ac-dim);
+    border: 1px solid var(--bd3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: var(--ac);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.20);
+    flex-shrink: 0;
+    transition: color var(--tr), border-color var(--tr), box-shadow var(--tr), background var(--tr);
+    animation: iconIn 0.35s cubic-bezier(.2,.8,.2,1) 0.20s both;
+  }
+  @keyframes iconIn {
+    from { opacity: 0; transform: scale(0.5); }
+    to   { opacity: 1; transform: scale(1);   }
+  }
+  .icon-wrap.revoked {
+    color: var(--red);
+    border-color: var(--bd-red);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.20);
+    background: var(--rd);
+    animation: shakeIcon 0.4s cubic-bezier(.36,.07,.19,.97) both;
+  }
+  @keyframes shakeIcon {
+    0%,100% { transform: translateX(0); }
+    20%     { transform: translateX(-5px); }
+    40%     { transform: translateX(5px);  }
+    60%     { transform: translateX(-3px); }
+    80%     { transform: translateX(3px);  }
+  }
+
+  /* ── Heading ── */
+  .label-row {
+    text-align: center;
+    animation: fadeSlideUp 0.35s ease 0.30s both;
+  }
+  .label-row h2 {
+    font-family: 'Syne', 'Inter', sans-serif;
+    font-size: 15px; font-weight: 700;
+    color: var(--text); letter-spacing: -0.2px;
+    margin-bottom: 4px;
+    transition: color var(--tr);
+  }
+  .label-row p {
+    font-family: 'Inter', sans-serif;
+    font-size: 11.5px; color: var(--text2);
+    letter-spacing: 0.01em;
+    line-height: 1.55;
+    transition: color var(--tr);
+  }
+
+  /* ── Revocation banner ── */
+  .revoke-banner {
+    display: none; width: 100%;
+    background: rgba(240,71,71,0.07);
+    border: 1px solid rgba(240,71,71,0.22);
+    border-radius: 12px; padding: 9px 14px;
+    font-size: 10px; color: var(--red);
+    letter-spacing: 0.05em; text-align: center;
+    line-height: 1.5;
+  }
+  .revoke-banner.show {
+    display: block;
+    animation: fadeSlideUp 0.28s ease both;
+  }
+
+  /* ── Input row ── */
+  .input-row {
+    width: 100%; display: flex; gap: 8px;
+    animation: fadeSlideUp 0.35s ease 0.38s both;
+  }
+  .key-input {
+    flex: 1;
+    background: var(--s2);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 11.5px; letter-spacing: 0.07em;
+    padding: 0 14px;
+    height: 40px;
+    outline: none;
+    transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
+  }
+  .key-input::placeholder { color: var(--dim); }
+  .key-input:hover:not(:disabled) {
+    background: var(--s3);
+    border-color: rgba(255,255,255,0.13);
+  }
+  .key-input:focus {
+    background: rgba(20,29,43,0.98);
+    border-color: rgba(88,101,242,0.50);
+    box-shadow: 0 0 0 3px rgba(88,101,242,0.12);
+  }
+  .key-input.error {
+    border-color: rgba(240,71,71,0.55);
+    box-shadow: 0 0 0 3px rgba(240,71,71,0.09);
+    animation: inputShake 0.32s cubic-bezier(.36,.07,.19,.97) both;
+  }
+  @keyframes inputShake {
+    0%,100% { transform: translateX(0); }
+    25%     { transform: translateX(-5px); }
+    75%     { transform: translateX(5px);  }
+  }
+  .key-input:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ── Verify button ── */
+  .activate-btn {
+    background: var(--ac);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-family: 'Inter', 'SF Pro Display', sans-serif;
+    font-weight: 600; font-size: 12px;
+    letter-spacing: 0.03em;
+    padding: 0 20px;
+    height: 40px;
+    cursor: pointer;
+    flex-shrink: 0;
+    position: relative; overflow: hidden;
+    box-shadow: 0 4px 16px rgba(88,101,242,0.30);
+    transition: all var(--tr);
+  }
+  .activate-btn::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.5s ease;
+  }
+  .activate-btn:hover:not(:disabled)::before { transform: translateX(100%); }
+  .activate-btn:hover:not(:disabled) {
+    background: #6875f5;
+    box-shadow: 0 6px 22px rgba(88,101,242,0.45);
+    transform: translateY(-2px);
+  }
+  .activate-btn:active:not(:disabled) { transform: scale(0.96) translateY(0); box-shadow: none; }
+  .activate-btn:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+  /* ── Status line ── */
+  .status {
+    font-family: 'Inter', sans-serif;
+    font-size: 11.5px; letter-spacing: 0.01em;
+    min-height: 16px; text-align: center;
+    transition: color var(--tr), opacity var(--tr);
+    animation: fadeSlideUp 0.35s ease 0.44s both;
+  }
+  .status.ok   { color: var(--green); }
+  .status.err  { color: var(--red); }
+  .status.info { color: var(--text2); }
+
+  /* ── Info card ── */
+  .info-card {
+    width: 100%;
+    background: var(--s3);
+    border: 1px solid rgba(88,101,242,0.18);
+    border-radius: 14px; padding: 13px 16px;
+    display: none;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 20px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 4px 14px rgba(0,0,0,0.25);
+  }
+  .info-card.show {
+    display: grid;
+    animation: fadeSlideUp 0.30s cubic-bezier(.25,.46,.45,.94) both;
+  }
+  .info-row { display: flex; flex-direction: column; gap: 3px; }
+  .info-lbl {
+    font-family: 'Inter', sans-serif;
+    font-size: 9px; color: var(--dim);
+    letter-spacing: 0.10em; text-transform: uppercase;
+    font-weight: 600;
+  }
+  .info-val {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px; color: var(--text);
+    letter-spacing: 0.01em;
+    font-weight: 500;
+  }
+  .info-val.ok   { color: var(--green); }
+  .info-val.warn { color: var(--yellow); }
+  .info-val.bad  { color: var(--red); }
+
+  /* ── Spinner ── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    display: inline-block; width: 10px; height: 10px;
+    border: 1.5px solid rgba(88,101,242,0.22);
+    border-top-color: var(--ac);
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    vertical-align: middle; margin-right: 5px;
+  }
+
+  /* ── Launch Loading Overlay ── */
+  .launch-overlay {
+    position: absolute; inset: 0; border-radius: 13px;
+    background: var(--s1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 26px;
+    z-index: 100;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .launch-overlay.show {
+    opacity: 1; pointer-events: all;
+  }
+  .launch-icon-ring {
+    position: relative;
+    width: 68px; height: 68px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .launch-icon-ring::before {
+    content: '';
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.06);
+    border-top-color: var(--ac);
+    animation: lspin 0.80s linear infinite;
+  }
+  .launch-icon-ring::after {
+    content: '';
+    position: absolute; inset: -5px; border-radius: 50%;
+    border: 1px solid rgba(91,108,240,0.06);
+  }
+  @keyframes lspin { to { transform: rotate(360deg); } }
+  .launch-bolt {
+    font-size: 24px; color: var(--ac);
+    filter: none;
+    opacity: 0.90;
+  }
+  .launch-text-wrap {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 14px;
+  }
+  .launch-title {
+    font-family: 'Syne', 'Inter', sans-serif;
+    font-size: 13px; font-weight: 700;
+    color: var(--text); letter-spacing: 0.06em;
+  }
+  .launch-bar-wrap {
+    width: 180px; height: 2px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px; overflow: hidden;
+  }
+  .launch-bar {
+    height: 100%; width: 0%;
+    background: var(--ac);
+    border-radius: 2px;
+    box-shadow: none;
+    transition: width 0.35s cubic-bezier(.2,.8,.2,1);
+    position: relative;
+  }
+  .launch-bar::after {
+    content: '';
+    position: absolute; top: 0; left: -100%;
+    width: 60px; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
+    animation: lshimmer 1.2s ease infinite;
+  }
+  @keyframes lshimmer {
+    from { left: -60px; opacity: 0.5; }
+    to   { left: 100%;  opacity: 0.8; }
+  }
+  .launch-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 9.5px; letter-spacing: 0.12em;
+    color: rgba(88,101,242,0.55);
+    text-transform: uppercase;
+    font-weight: 600;
+    transition: opacity 0.15s ease;
+    min-height: 12px;
+  }
+
+  /* ── Shared fade-up ── */
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Launch loading overlay -->
+  <div class="launch-overlay" id="launchOverlay">
+    <div class="launch-icon-ring">
+      <i class="bi bi-lightning-charge-fill launch-bolt"></i>
+    </div>
+    <div class="launch-text-wrap">
+      <div class="launch-title">LAUNCHING FLT</div>
+      <div class="launch-bar-wrap">
+        <div class="launch-bar" id="launchBar"></div>
+      </div>
+      <div class="launch-label" id="launchLabel">INITIALIZING…</div>
+    </div>
+  </div>
+
+  <div class="titlebar">
+    <div class="tb-brand">
+      <i class="bi bi-lightning-charge-fill"></i>
+      FLT
+      <span class="tb-sub">LICENSE</span>
+    </div>
+    <button class="tb-close" id="btnClose" title="Quit">
+      <i class="bi bi-x"></i>
+    </button>
+  </div>
+
+  <div class="body">
+
+    <div class="icon-wrap" id="iconWrap">
+      <i class="bi bi-shield-lock-fill" id="iconEl"></i>
+    </div>
+
+    <div class="label-row">
+      <h2 id="headingText">License Required</h2>
+      <p id="subText">Enter your license key to continue</p>
+    </div>
+
+    <div class="revoke-banner" id="revokeBanner"></div>
+
+    <div class="input-row">
+      <input class="key-input" id="keyInput" type="text"
+        placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+        autocomplete="off" spellcheck="false">
+      <button class="activate-btn" id="btnActivate">VERIFY</button>
+    </div>
+
+    <div class="status info" id="statusLine">Checking stored license…</div>
+
+    <div class="info-card" id="infoCard">
+      <div class="info-row">
+        <span class="info-lbl">License</span>
+        <span class="info-val" id="infoKey">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-lbl">Status</span>
+        <span class="info-val ok" id="infoStatus">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-lbl">Expires</span>
+        <span class="info-val" id="infoExpiry">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-lbl">Days Left</span>
+        <span class="info-val" id="infoDays">—</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const keyInput   = document.getElementById('keyInput');
+  const btnAct     = document.getElementById('btnActivate');
+  const btnClose   = document.getElementById('btnClose');
+  const statusEl   = document.getElementById('statusLine');
+  const infoCard   = document.getElementById('infoCard');
+  const revBanner  = document.getElementById('revokeBanner');
+  const iconWrap   = document.getElementById('iconWrap');
+  const iconEl     = document.getElementById('iconEl');
+  const headingTxt = document.getElementById('headingText');
+  const subTxt     = document.getElementById('subText');
+
+  const infoKey    = document.getElementById('infoKey');
+  const infoStatus = document.getElementById('infoStatus');
+  const infoExpiry = document.getElementById('infoExpiry');
+  const infoDays   = document.getElementById('infoDays');
+
+  /* ── Launch loading sequence ── */
+  function startLaunchSequence() {
+    const overlay = document.getElementById('launchOverlay');
+    const bar     = document.getElementById('launchBar');
+    const lbl     = document.getElementById('launchLabel');
+    if (!overlay) return;
+
+    overlay.classList.add('show');
+
+    const steps = [
+      { pct: 15,  text: 'INITIALIZING…',    delay: 0   },
+      { pct: 38,  text: 'LOADING MODULES…', delay: 600 },
+      { pct: 62,  text: 'STARTING ENGINE…', delay: 1100},
+      { pct: 85,  text: 'ALMOST READY…',    delay: 1700},
+      { pct: 100, text: 'LAUNCHING ✓',      delay: 2200},
+    ];
+
+    steps.forEach(s => {
+      setTimeout(() => {
+        if (bar) bar.style.width = s.pct + '%';
+        if (lbl) {
+          lbl.style.opacity = '0';
+          setTimeout(() => { lbl.textContent = s.text; lbl.style.opacity = '1'; }, 100);
+        }
+      }, s.delay);
+    });
+  }
+
+  /* ── Smooth status transition ── */
+  function setStatus(type, html) {
+    statusEl.style.opacity = '0';
+    statusEl.style.transform = 'translateY(3px)';
+    setTimeout(() => {
+      statusEl.className = 'status ' + type;
+      statusEl.innerHTML = html;
+      statusEl.style.opacity = '1';
+      statusEl.style.transform = 'translateY(0)';
+    }, 110);
+  }
+  statusEl.style.transition = 'opacity 0.15s ease, transform 0.15s ease, color 0.2s ease';
+
+  function setLoading(on) {
+    btnAct.disabled   = on;
+    keyInput.disabled = on;
+    if (on) setStatus('info', '<span class="spinner"></span>VERIFYING…');
+  }
+
+  function showInfoCard(info) {
+    if (!info) return;
+    infoKey.textContent    = info.maskedKey || '****';
+    infoStatus.textContent = (info.status || 'active').toUpperCase();
+    infoStatus.className   = 'info-val ' + (info.status === 'active' ? 'ok' : 'warn');
+    infoExpiry.textContent = info.expiryFormatted || 'Never';
+
+    const days = info.daysLeft;
+    if (days === null || days === undefined) {
+      infoDays.textContent = '∞';
+      infoDays.className   = 'info-val ok';
+    } else {
+      infoDays.textContent = days + ' days';
+      infoDays.className   = 'info-val ' + (days > 14 ? 'ok' : days > 3 ? 'warn' : 'bad');
+    }
+    infoCard.classList.add('show');
+  }
+
+  function showRevoked(reason) {
+    iconWrap.classList.add('revoked');
+    // re-trigger shake animation
+    void iconWrap.offsetWidth;
+    iconEl.className       = 'bi bi-shield-x-fill';
+    headingTxt.textContent = 'License Revoked';
+    subTxt.textContent     = 'Re-enter a valid key to continue';
+    revBanner.textContent  = reason || 'Your license is no longer valid.';
+    revBanner.classList.add('show');
+    infoCard.classList.remove('show');
+    setStatus('err', '<i class="bi bi-exclamation-triangle-fill"></i>&nbsp;Session terminated — license invalid');
+    keyInput.classList.add('error');
+  }
+
+  btnClose.addEventListener('click', () => {
+    window.electronAPI?.close?.() || window.close();
+  });
+
+  keyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') btnAct.click();
+    keyInput.classList.remove('error');
+  });
+
+  keyInput.addEventListener('input', () => {
+    const pos = keyInput.selectionStart;
+    const raw = keyInput.value.toUpperCase().replace(/[^A-Z0-9\-]/g, '');
+    keyInput.value = raw;
+    keyInput.setSelectionRange(pos, pos);
+    keyInput.classList.remove('error');
+    infoCard.classList.remove('show');
+  });
+
+  btnAct.addEventListener('click', async () => {
+    const key = keyInput.value.trim();
+    if (!key) {
+      setStatus('err', 'Please enter your license key.');
+      keyInput.classList.add('error');
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await window.electronAPI.licenseActivate(key);
+      if (result.valid) {
+        setStatus('ok', '<i class="bi bi-check-circle-fill"></i>&nbsp;License verified — launching FLT…');
+        keyInput.classList.remove('error');
+        showInfoCard(result.info);
+        iconWrap.classList.remove('revoked');
+        iconEl.className = 'bi bi-shield-check-fill';
+        revBanner.classList.remove('show');
+        startLaunchSequence();
+        // Main process opens app + closes this window
+      } else {
+        setLoading(false);
+        keyInput.classList.add('error');
+        infoCard.classList.remove('show');
+        setStatus('err', '<i class="bi bi-x-circle-fill"></i>&nbsp;' + (result.detail || 'Invalid license key.'));
+      }
+    } catch (err) {
+      setLoading(false);
+      keyInput.classList.add('error');
+      setStatus('err', 'Unexpected error — please try again.');
+    }
+  });
+
+  // ── Init: pre-fill stored key and auto-validate ──
+  async function init() {
+    setStatus('info', '<span class="spinner"></span>CHECKING LICENSE…');
+    try {
+      const storedKey = await window.electronAPI.licenseGetStoredKey();
+      if (storedKey) keyInput.value = storedKey;
+
+      const check = await window.electronAPI.licenseCheck();
+      if (check.valid) {
+        showInfoCard(check.info || await window.electronAPI.licenseGetInfo());
+        iconEl.className = 'bi bi-shield-check-fill';
+        setStatus('ok', '<i class="bi bi-check-circle-fill"></i>&nbsp;License valid — launching FLT…');
+        setLoading(true);
+        startLaunchSequence();
+        const result = await window.electronAPI.licenseActivate(storedKey);
+        if (!result.valid) {
+          setLoading(false);
+          keyInput.classList.add('error');
+          infoCard.classList.remove('show');
+          setStatus('err', '<i class="bi bi-x-circle-fill"></i>&nbsp;' + (result.detail || 'License check failed.'));
+        }
+      } else {
+        setStatus('info', storedKey
+          ? '<i class="bi bi-exclamation-circle"></i>&nbsp;Stored key invalid — please re-enter'
+          : 'Enter your license key to continue.');
+        if (!storedKey) keyInput.value = '';
+      }
+    } catch (e) {
+      setStatus('info', 'Enter your license key to continue.');
+    }
+    keyInput.focus();
+    keyInput.select();
+  }
+
+  // ── Revocation push from main process ──
+  if (window.electronAPI?.onLicenseRevokedReason) {
+    window.electronAPI.onLicenseRevokedReason((data) => {
+      const msg = data?.detail || 'Your license is no longer valid.';
+      showRevoked(msg);
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

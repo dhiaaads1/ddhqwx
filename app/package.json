@@ -1,0 +1,73 @@
+{
+  "name": "flt-app",
+  "version": "3.0.0",
+  "description": "FLT — Fan Loot Team desktop app",
+  "author": "Virus",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.flt.fanlooteam",
+    "productName": "FLT",
+    "copyright": "© Virus — All rights reserved",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "licenseManager.js",
+      "!fltAudioCapture.js",
+      "!sttWorker.js",
+      "!SETUP_WHISPER_LOCAL.md"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "src/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FLT",
+      "deleteAppDataOnUninstall": false
+    },
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "**/playwright/**",
+      "node_modules/playwright-core/**"
+    ],
+    "extraMetadata": {
+      "buildDate": "${BUILD_DATE}"
+    },
+    "extraResources": [
+      {
+        "from": "node_modules/playwright-core",
+        "to": "playwright-core",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.0.0",
+    "electron-packager": "^17.1.2"
+  },
+  "dependencies": {
+    "playwright": "^1.44.0"
+  }
+}
